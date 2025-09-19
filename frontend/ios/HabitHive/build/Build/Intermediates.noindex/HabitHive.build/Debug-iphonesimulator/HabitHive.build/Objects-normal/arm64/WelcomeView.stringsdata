@@ -1,0 +1,48 @@
+{
+  "source": "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Views/Auth/WelcomeView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Build better habits with your personal\nbee colony. Track, grow, and thrive\ntogether!",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 51
+        }
+      },
+      {
+        "comment": "",
+        "key": "🐝",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 33
+        }
+      },
+      {
+        "comment": "",
+        "key": "Welcome to",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 41
+        }
+      },
+      {
+        "comment": "",
+        "key": "HabitHive",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 45
+        }
+      },
+      {
+        "comment": "",
+        "key": "Get Started",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 64
+        }
+      }
+    ]
+  },
+  "version": 1
+}

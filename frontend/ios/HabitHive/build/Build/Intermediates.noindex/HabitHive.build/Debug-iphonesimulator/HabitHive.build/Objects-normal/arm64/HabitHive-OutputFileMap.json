@@ -1,0 +1,148 @@
+{
+  "" : {
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHive-master.dia",
+    "emit-module-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHive-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHive-master-emit-module.dia",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHive-master.swiftdeps"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/ContentView.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/ContentView.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/ContentView.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/ContentView.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/ContentView.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/ContentView.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/ContentView~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Core/Design/Theme.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Theme.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Theme.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Theme.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Theme.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Theme.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Theme.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Theme.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Theme~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Core/Models/Models.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Models.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Models.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Models.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Models.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Models.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Models.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Models.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Models~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Core/Services/APIClient.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/APIClient.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/APIClient.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/APIClient.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/APIClient.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/APIClient.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/APIClient.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/APIClient.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/APIClient~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/HabitHiveApp.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHiveApp.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHiveApp.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHiveApp.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHiveApp.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHiveApp.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHiveApp.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHiveApp.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitHiveApp~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Item.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Item.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Item.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Item.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Item.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Item.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Item.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Item.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/Item~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Views/Auth/PhoneAuthView.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/PhoneAuthView.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/PhoneAuthView.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/PhoneAuthView.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/PhoneAuthView.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/PhoneAuthView.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/PhoneAuthView.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/PhoneAuthView.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/PhoneAuthView~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Views/Auth/WelcomeView.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/WelcomeView.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/WelcomeView.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/WelcomeView.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/WelcomeView.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/WelcomeView.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/WelcomeView.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/WelcomeView.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/WelcomeView~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Views/Habits/CreateHabitView.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/CreateHabitView.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/CreateHabitView.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/CreateHabitView.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/CreateHabitView.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/CreateHabitView.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/CreateHabitView.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/CreateHabitView.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/CreateHabitView~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Views/Habits/HabitDetailView.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitDetailView.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitDetailView.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitDetailView.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitDetailView.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitDetailView.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitDetailView.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitDetailView.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitDetailView~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Views/Habits/HabitsHomeView.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitsHomeView.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitsHomeView.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitsHomeView.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitsHomeView.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitsHomeView.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitsHomeView.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitsHomeView.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HabitsHomeView~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Views/Habits/HoneyPourAnimationView.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HoneyPourAnimationView.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HoneyPourAnimationView.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HoneyPourAnimationView.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HoneyPourAnimationView.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HoneyPourAnimationView.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HoneyPourAnimationView.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HoneyPourAnimationView.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/HoneyPourAnimationView~partial.swiftmodule"
+  },
+  "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Views/MainTabView.swift" : {
+    "const-values" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/MainTabView.swiftconstvalues",
+    "dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/MainTabView.d",
+    "diagnostics" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/MainTabView.dia",
+    "index-unit-output-path" : "/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/MainTabView.o",
+    "llvm-bc" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/MainTabView.bc",
+    "object" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/MainTabView.o",
+    "swift-dependencies" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/MainTabView.swiftdeps",
+    "swiftmodule" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/HabitHive.build/Debug-iphonesimulator/HabitHive.build/Objects-normal/arm64/MainTabView~partial.swiftmodule"
+  }
+}

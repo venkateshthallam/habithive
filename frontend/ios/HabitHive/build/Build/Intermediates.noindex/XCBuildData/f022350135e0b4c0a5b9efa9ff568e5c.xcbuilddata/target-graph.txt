@@ -1,0 +1,6 @@
+Target dependency graph (3 targets)
+Target 'HabitHiveTests' in project 'HabitHive'
+➜ Explicit dependency on target 'HabitHive' in project 'HabitHive'
+Target 'HabitHiveUITests' in project 'HabitHive'
+➜ Explicit dependency on target 'HabitHive' in project 'HabitHive'
+Target 'HabitHive' in project 'HabitHive' (no dependencies)

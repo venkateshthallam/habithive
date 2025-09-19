@@ -1,0 +1,40 @@
+{
+  "source": "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Views/Habits/HoneyPourAnimationView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "🐝",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 27
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld / %lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 91
+        }
+      },
+      {
+        "comment": "",
+        "key": "Great job!",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 86
+        }
+      },
+      {
+        "comment": "",
+        "key": "Logging...",
+        "location": {
+          "startingColumn": 57,
+          "startingLine": 86
+        }
+      }
+    ]
+  },
+  "version": 1
+}

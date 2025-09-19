@@ -1,0 +1,70 @@
+{
+  "buildCommand" : {
+    "command" : "build",
+    "skipDependencies" : false,
+    "style" : "buildOnly"
+  },
+  "configuredTargets" : [
+    {
+      "guid" : "4e5d376faf04118f1527b294a3ff7915dabb9e950b60f6355b19e3f57f831520"
+    },
+    {
+      "guid" : "4e5d376faf04118f1527b294a3ff7915667452a661b851f5b5f98796a7361176"
+    },
+    {
+      "guid" : "4e5d376faf04118f1527b294a3ff7915c586730d94b13f4a1e6850adad2eee16"
+    }
+  ],
+  "containerPath" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive.xcodeproj",
+  "continueBuildingAfterErrors" : false,
+  "dependencyScope" : "workspace",
+  "enableIndexBuildArena" : false,
+  "hideShellScriptEnvironment" : false,
+  "parameters" : {
+    "action" : "build",
+    "activeArchitecture" : "undefined_arch",
+    "activeRunDestination" : {
+      "disableOnlyActiveArch" : true,
+      "platform" : "iphonesimulator",
+      "sdk" : "iphonesimulator18.0",
+      "sdkVariant" : "iphonesimulator",
+      "supportedArchitectures" : [
+        "i386",
+        "x86_64"
+      ],
+      "targetArchitecture" : "undefined_arch"
+    },
+    "arenaInfo" : {
+      "buildIntermediatesPath" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Products",
+      "derivedDataPath" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build",
+      "indexDataStoreFolderPath" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Index.noindex/DataStore",
+      "indexEnableDataStore" : true,
+      "indexPCHPath" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/Intermediates.noindex/PrecompiledHeaders"
+    },
+    "configurationName" : "Debug",
+    "overrides" : {
+      "commandLine" : {
+        "table" : {
+          "SDKROOT" : "iphonesimulator18.0"
+        }
+      },
+      "synthesized" : {
+        "table" : {
+          "CLANG_COVERAGE_MAPPING" : "YES",
+          "CLANG_PROFILE_DATA_DIRECTORY" : "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/build/Build/ProfileData",
+          "ENABLE_PREVIEWS" : "NO",
+          "ENABLE_XOJIT_PREVIEWS" : "YES",
+          "ONLY_ACTIVE_ARCH" : "YES"
+        }
+      }
+    }
+  },
+  "schemeCommand" : "test",
+  "showNonLoggedProgress" : true,
+  "useDryRun" : false,
+  "useImplicitDependencies" : true,
+  "useLegacyBuildLocations" : false,
+  "useParallelTargets" : true
+}
