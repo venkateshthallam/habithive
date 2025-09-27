@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 struct MainTabView: View {
     @StateObject private var themeManager = ThemeManager.shared
@@ -109,6 +108,170 @@ struct HivesView: View {
         }
     }
 
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("Overall Completion")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(HiveColors.beeBlack)
+
+            VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+                HStack(alignment: .lastTextBaseline) {
+                    Text(String(format: "%.0f%%", viewModel.overallCompletion))
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .foregroundColor(HiveColors.beeBlack)
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: HiveSpacing.xs) {
+                        Text("Today")
+                            .font(HiveTypography.caption)
+                            .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                        Text("\(viewModel.completedToday) logged")
+                            .font(HiveTypography.caption)
+                            .foregroundColor(HiveColors.honeyGradientEnd)
+                    }
+                }
+
+                ProgressView(value: min(max(viewModel.overallCompletion / 100, 0), 1))
+                    .tint(HiveColors.mintSuccess)
+                    .scaleEffect(x: 1, y: 2, anchor: .center)
+            }
+        }
+        .padding(HiveSpacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+        )
+    }
+
+    private var weeklyProgressCard: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("This Week")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(HiveColors.beeBlack)
+
+            HStack(alignment: .bottom, spacing: HiveSpacing.sm) {
+                let labels = ["S","M","T","W","T","F","S"]
+                let maxValue = max(viewModel.weeklyProgress.max() ?? 1, 1)
+                ForEach(Array(viewModel.weeklyProgress.enumerated()), id: \.offset) { index, value in
+                    VStack(spacing: HiveSpacing.xs) {
+                        RoundedRectangle(cornerRadius: HiveRadius.small)
+                            .fill(HiveColors.honeyGradientEnd.opacity(0.85))
+                            .frame(width: 24, height: max(CGFloat(value) / CGFloat(maxValue), 0.05) * 90)
+
+                        Text(labels[index % labels.count])
+                            .font(HiveTypography.caption)
+                            .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .padding(HiveSpacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+        )
+    }
+
+    private var streaksCard: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("Current Streaks")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(HiveColors.beeBlack)
+
+            if viewModel.currentStreaks.isEmpty {
+                Text("No streaks yet — start pouring honey!")
+                    .font(HiveTypography.body)
+                    .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+            } else {
+                VStack(spacing: HiveSpacing.sm) {
+                    ForEach(viewModel.currentStreaks) { streak in
+                        HStack(spacing: HiveSpacing.md) {
+                            Text(streak.emoji ?? "🐝")
+                                .font(.system(size: 28))
+                            Text(streak.name)
+                                .font(HiveTypography.body)
+                                .foregroundColor(HiveColors.beeBlack)
+                            Spacer()
+                            Text("\(streak.streak) 🔥")
+                                .font(HiveTypography.headline)
+                                .foregroundColor(HiveColors.honeyGradientEnd)
+                        }
+                        .padding(HiveSpacing.md)
+                        .background(
+                            RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                .fill(HiveColors.lightGray)
+                        )
+                    }
+                }
+            }
+        }
+        .padding(HiveSpacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+        )
+    }
+
+    private var yearOverviewCard: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("Year Overview")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(HiveColors.beeBlack)
+
+            YearHeatmapView(data: viewModel.yearComb)
+        }
+        .padding(HiveSpacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+        )
+    }
+
+    private var bestHabitCard: some View {
+        Group {
+            if let best = viewModel.bestPerformer {
+                VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+                    Text("Best Performing")
+                        .font(HiveTypography.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(HiveColors.beeBlack)
+
+                    HStack(spacing: HiveSpacing.md) {
+                        Text(best.emoji ?? "🏆")
+                            .font(.system(size: 32))
+
+                        VStack(alignment: .leading, spacing: HiveSpacing.xs) {
+                            Text(best.name)
+                                .font(HiveTypography.body)
+                                .foregroundColor(HiveColors.beeBlack)
+
+                            Text(String(format: "%.0f%% completion", best.completionRate))
+                                .font(HiveTypography.caption)
+                                .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                        }
+
+                        Spacer()
+                    }
+                }
+                .padding(HiveSpacing.lg)
+                .background(
+                    RoundedRectangle(cornerRadius: HiveRadius.large)
+                        .fill(Color.white)
+                        .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+                )
+            }
+        }
+    }
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: HiveSpacing.sm) {
             Text("Your Hives")
@@ -494,9 +657,14 @@ class HivesViewModel: ObservableObject {
     @Published var leaderboard: [HiveLeaderboardEntry] = []
     @Published var isLoading = false
     @Published var errorMessage = ""
+    @Published var overallCompletion: Double = 0
+    @Published var completedToday: Int = 0
+    @Published var weeklyProgress: [Int] = Array(repeating: 0, count: 7)
+    @Published var currentStreaks: [HabitStreakDisplay] = []
+    @Published var yearComb: [String: Int] = [:]
+    @Published var bestPerformer: HabitPerformanceSummary?
 
-    private let apiClient = APIClient.shared
-    private var cancellables = Set<Combine.AnyCancellable>()
+    private let apiClient = FastAPIClient.shared
 
     func loadHives() {
         Task {
@@ -505,18 +673,14 @@ class HivesViewModel: ObservableObject {
     }
 
     func joinHive(code: String) {
-        apiClient.joinHive(code: code)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        self.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { _ in
-                    self.loadHives()
-                }
-            )
-            .store(in: &cancellables)
+        Task {
+            do {
+                _ = try await apiClient.joinHive(code: code)
+                await loadHivesAsync()
+            } catch {
+                await MainActor.run { self.errorMessage = error.localizedDescription }
+            }
+        }
     }
 
     func refreshHives() async {
@@ -532,6 +696,10 @@ class HivesViewModel: ObservableObject {
             self.hives = hives
             let leaders = await fetchLeaderboard(for: hives)
             self.leaderboard = leaders
+
+            if let summary = try? await apiClient.getInsightsSummary() {
+                applyInsights(summary)
+            }
         } catch {
             self.errorMessage = error.localizedDescription
             self.hives = []
@@ -542,20 +710,7 @@ class HivesViewModel: ObservableObject {
     }
 
     private func fetchHives() async throws -> [Hive] {
-        try await withCheckedThrowingContinuation { continuation in
-            apiClient.getHives()
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            continuation.resume(throwing: error)
-                        }
-                    },
-                    receiveValue: { hives in
-                        continuation.resume(returning: hives)
-                    }
-                )
-                .store(in: &cancellables)
-        }
+        try await apiClient.getHives()
     }
 
     private func fetchLeaderboard(for hives: [Hive]) async -> [HiveLeaderboardEntry] {
@@ -601,20 +756,17 @@ class HivesViewModel: ObservableObject {
     }
 
     private func fetchHiveDetail(hiveId: String) async throws -> HiveDetail {
-        try await withCheckedThrowingContinuation { continuation in
-            apiClient.getHiveDetail(hiveId: hiveId)
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            continuation.resume(throwing: error)
-                        }
-                    },
-                    receiveValue: { detail in
-                        continuation.resume(returning: detail)
-                    }
-                )
-                .store(in: &cancellables)
-        }
+        try await apiClient.getHiveDetail(hiveId: hiveId)
+    }
+
+    @MainActor
+    private func applyInsights(_ summary: InsightsSummary) {
+        overallCompletion = summary.overallCompletion
+        completedToday = summary.completedToday
+        weeklyProgress = summary.weeklyProgress
+        currentStreaks = summary.currentStreaks
+        yearComb = summary.yearComb
+        bestPerformer = summary.bestPerforming
     }
 }
 
@@ -645,250 +797,267 @@ struct HiveLeaderboardEntry: Identifiable {
     }
 }
 
-private extension DateFormatter {
-    static let hiveDayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-}
-
 // MARK: - Insights View
 
 struct InsightsView: View {
     @StateObject private var themeManager = ThemeManager.shared
     @StateObject private var viewModel = InsightsViewModel()
-    
+
     var body: some View {
-        NavigationStack {
+        NavigationView {
+            insightsContent
+                .navigationBarTitle("Insights", displayMode: .inline)
+        }
+        .onAppear {
+            viewModel.loadInsights()
+        }
+    }
+
+    @ViewBuilder
+    private var insightsContent: some View {
+        ZStack {
+            themeManager.currentTheme.backgroundColor
+                .ignoresSafeArea()
+
+            if viewModel.isLoading {
+                VStack(spacing: HiveSpacing.lg) {
+                    ProgressView()
+                    Text("Loading insights...")
+                        .font(HiveTypography.body)
+                        .foregroundColor(HiveColors.beeBlack.opacity(0.7))
+                }
+            } else {
+                ScrollView {
+                    VStack(spacing: HiveSpacing.lg) {
+                        SummaryCard(overallCompletion: viewModel.overallCompletion, completedToday: viewModel.completedToday)
+                        WeeklyProgressCard(weeklyProgress: viewModel.weeklyProgress)
+                        StreaksCard(currentStreaks: viewModel.currentStreaks)
+                        YearOverviewCard(yearData: viewModel.yearComb)
+                        BestHabitCard(bestPerformer: viewModel.bestPerformer)
+                    }
+                    .padding(.horizontal, HiveSpacing.lg)
+                    .padding(.bottom, HiveSpacing.xl)
+                    .padding(.top, HiveSpacing.lg)
+                }
+                .refreshable {
+                    await viewModel.refreshInsights()
+                }
+            }
+        }
+    }
+
+}
+
+
+class InsightsViewModel: ObservableObject {
+    @Published var overallCompletion: Double = 0
+    @Published var activeHabits: Int = 0
+    @Published var completedToday: Int = 0
+    @Published var weeklyProgress: [Int] = Array(repeating: 0, count: 7)
+    @Published var currentStreaks: [HabitStreakDisplay] = []
+    @Published var yearComb: [String: Int] = [:]
+    @Published var bestPerformer: HabitPerformanceSummary?
+    @Published var isLoading = false
+    @Published var errorMessage = ""
+
+    private let apiClient = FastAPIClient.shared
+
+    func loadInsights() {
+        Task { await loadInsightsAsync() }
+    }
+
+    func refreshInsights() async {
+        await loadInsightsAsync()
+    }
+
+    @MainActor
+    private func loadInsightsAsync() async {
+        isLoading = true
+
+        do {
+            let summary = try await apiClient.getInsightsSummary()
+            apply(summary)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isLoading = false
+    }
+
+    private func apply(_ summary: InsightsSummary) {
+        overallCompletion = summary.overallCompletion
+        activeHabits = summary.activeHabits
+        completedToday = summary.completedToday
+        weeklyProgress = summary.weeklyProgress
+        currentStreaks = summary.currentStreaks
+        yearComb = summary.yearComb
+        bestPerformer = summary.bestPerforming
+    }
+}
+
+struct CreateHiveFromHabitView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel = CreateHiveViewModel()
+    @StateObject private var themeManager = ThemeManager.shared
+    @State private var selectedHabitId: String?
+    @State private var hiveName = ""
+    @State private var isCreating = false
+    @State private var errorMessage = ""
+
+    let onComplete: (Hive) -> Void
+
+    var body: some View {
+        NavigationView {
             ZStack {
-                // Gradient background like other screens
-                themeManager.currentTheme.primaryGradient
+                themeManager.currentTheme.backgroundColor
                     .ignoresSafeArea()
 
-                if viewModel.isLoading {
-                    VStack(spacing: HiveSpacing.lg) {
-                        Spacer()
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(1.2)
-                        Text("Loading insights...")
+                VStack(alignment: .leading, spacing: HiveSpacing.lg) {
+                    VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+                        Text("Choose a habit")
+                            .font(HiveTypography.title3)
+                            .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                        Text("We'll copy its schedule, target, and history so your hive can start with momentum.")
                             .font(HiveTypography.body)
-                            .foregroundColor(.white.opacity(0.9))
-                        Spacer()
+                            .foregroundColor(themeManager.currentTheme.secondaryTextColor)
                     }
-                } else {
-                    ScrollView {
-                        VStack(spacing: HiveSpacing.lg) {
-                            // Summary Card
-                            summaryCard
 
-                            // Weekly Stats
-                            weeklyStatsCard
-
-                            // Habit Performance
-                            habitPerformanceCard
+                    if viewModel.isLoading {
+                        HStack {
+                            ProgressView()
+                            Text("Loading habits...")
+                                .font(HiveTypography.body)
+                                .foregroundColor(themeManager.currentTheme.secondaryTextColor)
                         }
-                        .padding(HiveSpacing.lg)
-                    }
-                    .refreshable {
-                        await viewModel.refreshInsights()
-                    }
-                }
-            }
-            .navigationTitle("Insights")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color.clear, for: .navigationBar)
-            .onAppear {
-                viewModel.loadInsights()
-            }
-        }
-    }
-    
-    private var summaryCard: some View {
-        VStack(spacing: HiveSpacing.lg) {
-            Text("Today's Summary")
-                .font(HiveTypography.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-
-            HStack(spacing: HiveSpacing.xl) {
-                StatView(
-                    value: "\(viewModel.completedToday)",
-                    label: "Completed",
-                    color: HiveColors.mintSuccess
-                )
-
-                StatView(
-                    value: "\(viewModel.totalHabits)",
-                    label: "Total",
-                    color: HiveColors.honeyGradientEnd
-                )
-
-                StatView(
-                    value: "\(viewModel.bestStreak)",
-                    label: "Best Streak",
-                    color: .orange
-                )
-            }
-        }
-        .padding(HiveSpacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: HiveRadius.xlarge)
-                .fill(Color.white.opacity(0.15))
-                .overlay(
-                    RoundedRectangle(cornerRadius: HiveRadius.xlarge)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-        )
-    }
-    
-    private var weeklyStatsCard: some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.lg) {
-            Text("This Week")
-                .font(HiveTypography.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-
-            HStack(spacing: HiveSpacing.sm) {
-                ForEach(0..<7) { day in
-                    VStack(spacing: HiveSpacing.xs) {
-                        RoundedRectangle(cornerRadius: HiveRadius.small)
-                            .fill(
-                                day < 5 ?
-                                Color.white.opacity(0.8) :
-                                Color.white.opacity(0.2)
-                            )
-                            .frame(width: 35, height: CGFloat.random(in: 30...80))
-
-                        Text(["S", "M", "T", "W", "T", "F", "S"][day])
-                            .font(HiveTypography.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                }
-            }
-            .padding(.horizontal, HiveSpacing.sm)
-        }
-        .padding(HiveSpacing.xl)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: HiveRadius.xlarge)
-                .fill(Color.white.opacity(0.15))
-                .overlay(
-                    RoundedRectangle(cornerRadius: HiveRadius.xlarge)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-        )
-    }
-    
-    private var habitPerformanceCard: some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.lg) {
-            Text("Habit Performance")
-                .font(HiveTypography.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-
-            if viewModel.habitStats.isEmpty {
-                VStack(spacing: HiveSpacing.md) {
-                    Text("🐝")
-                        .font(.system(size: 48))
-
-                    Text("No habits to track yet")
-                        .font(HiveTypography.body)
-                        .foregroundColor(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, HiveSpacing.lg)
-            } else {
-                VStack(spacing: HiveSpacing.md) {
-                    ForEach(viewModel.habitStats.prefix(5)) { stat in
-                        HStack(spacing: HiveSpacing.md) {
-                            Text(stat.emoji)
-                                .font(.system(size: 24))
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(stat.name)
-                                    .font(HiveTypography.callout)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white)
-
-                                Text("\(stat.completionRate)% completion")
-                                    .font(HiveTypography.caption)
-                                    .foregroundColor(.white.opacity(0.7))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: HiveRadius.large)
+                                .fill(themeManager.currentTheme.cardBackgroundColor)
+                                .shadow(color: Color.black.opacity(0.05), radius: 12, x: 0, y: 6)
+                        )
+                    } else {
+                        ScrollView {
+                            VStack(spacing: HiveSpacing.sm) {
+                                ForEach(viewModel.habits) { habit in
+                                    HabitSelectionRow(
+                                        habit: habit,
+                                        isSelected: selectedHabitId == habit.id,
+                                        theme: themeManager.currentTheme
+                                    ) {
+                                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                                            selectedHabitId = habit.id
+                                        }
+                                        if hiveName.isEmpty {
+                                            hiveName = "\(habit.name) Hive"
+                                        }
+                                    }
+                                }
                             }
-
-                            Spacer()
-
-                            HStack(spacing: HiveSpacing.xs) {
-                                Text("\(stat.streak)")
-                                    .font(HiveTypography.caption)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                Text("🔥")
-                                    .font(HiveTypography.caption)
-                            }
-                            .padding(.horizontal, HiveSpacing.sm)
                             .padding(.vertical, HiveSpacing.xs)
-                            .background(
-                                Capsule()
-                                    .fill(Color.white.opacity(0.2))
-                            )
                         }
-                        .padding(.vertical, HiveSpacing.xs)
+                    }
+
+                    VStack(alignment: .leading, spacing: HiveSpacing.xs) {
+                        Text("Hive name")
+                            .font(HiveTypography.caption)
+                            .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+
+                        TextField("Hydration Heroes", text: $hiveName)
+                            .font(HiveTypography.body)
+                            .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                            .padding(HiveSpacing.sm)
+                            .background(
+                                RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                    .fill(themeManager.currentTheme.cardBackgroundColor)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                            .stroke(HiveColors.borderColor.opacity(0.5), lineWidth: 1)
+                                    )
+                                    .shadow(color: Color.black.opacity(themeManager.currentTheme == .night ? 0.4 : 0.05), radius: 10, x: 0, y: 4)
+                            )
+                    }
+
+                    if !errorMessage.isEmpty {
+                        Text(errorMessage)
+                            .font(HiveTypography.caption)
+                            .foregroundColor(HiveColors.error)
+                    }
+
+                    Button(action: createHive) {
+                        HStack(spacing: HiveSpacing.sm) {
+                            if isCreating {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 16, weight: .semibold))
+                                Text("Create Hive")
+                                    .font(HiveTypography.headline)
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, HiveSpacing.md)
+                        .background(
+                            RoundedRectangle(cornerRadius: HiveRadius.large)
+                                .fill(themeManager.currentTheme.primaryGradient)
+                                .opacity(canCreate ? 1 : 0.5)
+                                .shadow(color: HiveColors.honeyGradientEnd.opacity(0.3), radius: 18, x: 0, y: 10)
+                        )
+                    }
+                    .disabled(!canCreate || isCreating)
+
+                    Spacer(minLength: 40)
+                }
+                .padding(.horizontal, HiveSpacing.lg)
+                .padding(.top, HiveSpacing.lg)
+            }
+            .navigationBarTitle("Create Hive", displayMode: .inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
                     }
                 }
             }
+            .onAppear {
+                viewModel.loadHabits()
+            }
         }
-        .padding(HiveSpacing.xl)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: HiveRadius.xlarge)
-                .fill(Color.white.opacity(0.15))
-                .overlay(
-                    RoundedRectangle(cornerRadius: HiveRadius.xlarge)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-        )
     }
-}
 
-struct StatView: View {
-    let value: String
-    let label: String
-    let color: Color
+    private var canCreate: Bool {
+        !hiveName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && selectedHabitId != nil
+    }
 
-    var body: some View {
-        VStack(spacing: HiveSpacing.sm) {
-            Text(value)
-                .font(.system(size: 36, weight: .bold, design: .default))
-                .foregroundColor(color)
+    private func createHive() {
+        guard let habitId = selectedHabitId else { return }
 
-            Text(label)
-                .font(HiveTypography.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.white.opacity(0.8))
-                .multilineTextAlignment(.center)
+        isCreating = true
+        errorMessage = ""
+        viewModel.createHive(from: habitId, name: hiveName.trimmingCharacters(in: .whitespacesAndNewlines)) { result in
+            isCreating = false
+            switch result {
+            case .success(let hive):
+                onComplete(hive)
+                dismiss()
+            case .failure(let error):
+                errorMessage = error.errorDescription ?? "Unable to create hive"
+            }
         }
     }
 }
-
 struct ProfileView: View {
     @StateObject private var themeManager = ThemeManager.shared
-    @StateObject private var apiClient = APIClient.shared
+    @StateObject private var apiClient = FastAPIClient.shared
     @StateObject private var viewModel = ProfileViewModel()
     @State private var showSettings = false
     @State private var isEditingName = false
     @State private var newDisplayName = ""
     
-    var body: some View {
-        NavigationStack {
+var body: some View {
+        NavigationView {
             ZStack {
                 // Gradient background like other screens
                 themeManager.currentTheme.primaryGradient
@@ -1003,6 +1172,18 @@ struct ProfileView: View {
                                     apiClient.logout()
                                 }
                             )
+
+                            Divider()
+                                .background(Color.white.opacity(0.1))
+
+                            SettingsRow(
+                                icon: "trash",
+                                title: "Delete Account",
+                                isDestructive: true,
+                                action: {
+                                    viewModel.requestDeleteAccount()
+                                }
+                            )
                         }
                         .background(
                             RoundedRectangle(cornerRadius: HiveRadius.xlarge)
@@ -1018,9 +1199,27 @@ struct ProfileView: View {
                     }
                 }
             }
+            .overlay {
+                if viewModel.isDeletingAccount {
+                    ZStack {
+                        Color.black.opacity(0.35)
+                            .ignoresSafeArea()
+
+                        ProgressView("Deleting account…")
+                            .progressViewStyle(.circular)
+                            .tint(HiveColors.honeyGradientEnd)
+                            .padding(.horizontal, HiveSpacing.xl)
+                            .padding(.vertical, HiveSpacing.lg)
+                            .background(
+                                RoundedRectangle(cornerRadius: HiveRadius.large)
+                                    .fill(Color.white)
+                                    .shadow(color: .black.opacity(0.2), radius: 12, x: 0, y: 6)
+                            )
+                    }
+                }
             }
-            .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.inline)
+            }
+            .navigationBarTitle("Profile", displayMode: .inline)
             .onAppear {
                 viewModel.loadProfile()
             }
@@ -1080,6 +1279,33 @@ struct ProfileView: View {
                     }
                 }
             }
+            .confirmationDialog(
+                "Delete Account?",
+                isPresented: $viewModel.showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Account", role: .destructive) {
+                    viewModel.confirmDeleteAccount()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently remove your habits, hives, and profile data. This action cannot be undone.")
+            }
+            .alert(
+                "Couldn't Delete Account",
+                isPresented: Binding(
+                    get: { viewModel.deleteError != nil },
+                    set: { newValue in
+                        if !newValue {
+                            viewModel.deleteError = nil
+                        }
+                    }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(viewModel.deleteError ?? "Please try again later.")
+            }
         }
     }
 
@@ -1120,99 +1346,7 @@ struct SettingsRow: View {
     }
 }
 
-// MARK: - Insights Models
-struct HabitStat: Identifiable {
-    let id = UUID()
-    let name: String
-    let emoji: String
-    let completionRate: Int
-    let streak: Int
-}
 
-// MARK: - InsightsViewModel
-class InsightsViewModel: ObservableObject {
-    @Published var completedToday = 0
-    @Published var totalHabits = 0
-    @Published var bestStreak = 0
-    @Published var habitStats: [HabitStat] = []
-    @Published var isLoading = false
-
-    private let apiClient = APIClient.shared
-    private var cancellables = Set<Combine.AnyCancellable>()
-
-    func loadInsights() {
-        isLoading = true
-
-        apiClient.getInsightsSummary()
-            .sink(
-                receiveCompletion: { completion in
-                    self.isLoading = false
-                    if case .failure(let error) = completion {
-                        print("Failed to load insights: \(error)")
-                    }
-                },
-                receiveValue: { summary in
-                    self.completedToday = summary.completedToday
-                    self.totalHabits = summary.totalHabits
-                    self.bestStreak = summary.bestStreak
-                }
-            )
-            .store(in: &cancellables)
-
-        // Load habit stats
-        apiClient.getHabits(includeLogs: true, days: 7)
-            .sink(
-                receiveCompletion: { _ in },
-                receiveValue: { habits in
-                    self.habitStats = habits.map { habit in
-                        HabitStat(
-                            name: habit.name,
-                            emoji: habit.emoji ?? "🎯",
-                            completionRate: Int(habit.completionRate ?? 0),
-                            streak: habit.currentStreak ?? 0
-                        )
-                    }
-                }
-            )
-            .store(in: &cancellables)
-    }
-
-    func refreshInsights() async {
-        await loadInsightsAsync()
-    }
-
-    @MainActor
-    private func loadInsightsAsync() async {
-        isLoading = true
-
-        do {
-            let summary = try await withCheckedThrowingContinuation { continuation in
-                apiClient.getInsightsSummary()
-                    .sink(
-                        receiveCompletion: { completion in
-                            if case .failure(let error) = completion {
-                                continuation.resume(throwing: error)
-                            }
-                        },
-                        receiveValue: { summary in
-                            continuation.resume(returning: summary)
-                        }
-                    )
-                    .store(in: &cancellables)
-            }
-
-            self.completedToday = summary.completedToday
-            self.totalHabits = summary.totalHabits
-            self.bestStreak = summary.bestStreak
-        } catch {
-            print("Failed to load insights: \(error)")
-        }
-
-        isLoading = false
-    }
-}
-
-// MARK: - ProfileViewModel
 class ProfileViewModel: ObservableObject {
     @Published var displayName = "Bee"
     @Published var phone = ""
@@ -1222,9 +1356,11 @@ class ProfileViewModel: ObservableObject {
     @Published var showThemeSelector = false
     @Published var showTimeSelector = false
     @Published var selectedStartTime = Date()
+    @Published var showDeleteConfirmation = false
+    @Published var deleteError: String?
+    @Published var isDeletingAccount = false
 
-    private let apiClient = APIClient.shared
-    private var cancellables = Set<Combine.AnyCancellable>()
+    private let apiClient = FastAPIClient.shared
 
     var dayStartTime: String {
         let formatter = DateFormatter()
@@ -1235,50 +1371,23 @@ class ProfileViewModel: ObservableObject {
     }
 
     func loadProfile() {
-        isLoading = true
-
-        apiClient.getMyProfile()
-            .sink(
-                receiveCompletion: { completion in
-                    self.isLoading = false
-                    if case .failure(let error) = completion {
-                        print("Failed to load profile: \(error)")
-                    }
-                },
-                receiveValue: { user in
-                    self.displayName = user.displayName
-                    self.phone = user.phone
-                    self.dayStartHour = user.dayStartHour
-
-                    // Update selectedStartTime for the picker
-                    let calendar = Calendar.current
-                    self.selectedStartTime = calendar.date(bySettingHour: self.dayStartHour, minute: 0, second: 0, of: Date()) ?? Date()
-                }
-            )
-            .store(in: &cancellables)
+        Task { await loadProfileAsync() }
     }
 
     func updateDisplayName(_ name: String) {
         let update = ProfileUpdate(displayName: name)
-
-        apiClient.updateProfile(update)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("Failed to update profile: \(error)")
-                    }
-                },
-                receiveValue: { user in
-                    self.displayName = user.displayName
-                }
-            )
-            .store(in: &cancellables)
+        Task {
+            do {
+                let updated = try await apiClient.updateProfile(update)
+                await MainActor.run { self.displayName = updated.displayName }
+            } catch {
+                print("Failed to update profile: \(error)")
+            }
+        }
     }
 
     func toggleNotifications() {
         notificationsEnabled.toggle()
-        // Note: Notifications preference is stored locally for now
-        // Could be extended to sync with backend when notification settings are added to profiles table
     }
 
     func saveDayStartTime() {
@@ -1287,126 +1396,115 @@ class ProfileViewModel: ObservableObject {
         dayStartHour = hour
 
         let update = ProfileUpdate(dayStartHour: hour)
-
-        apiClient.updateProfile(update)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("Failed to update day start time: \(error)")
-                    }
-                },
-                receiveValue: { _ in }
-            )
-            .store(in: &cancellables)
+        Task {
+            do {
+                _ = try await apiClient.updateProfile(update)
+            } catch {
+                print("Failed to update day start time: \(error)")
+            }
+        }
 
         showTimeSelector = false
     }
+
+    func requestDeleteAccount() {
+        guard !isDeletingAccount else { return }
+        showDeleteConfirmation = true
+    }
+
+    func confirmDeleteAccount() {
+        guard !isDeletingAccount else { return }
+        Task {
+            await deleteAccountAsync()
+        }
+    }
+
+    @MainActor
+    private func deleteAccountAsync() async {
+        isDeletingAccount = true
+        deleteError = nil
+        showDeleteConfirmation = false
+        defer { isDeletingAccount = false }
+
+        do {
+            try await apiClient.deleteAccount()
+        } catch {
+            if let localized = (error as? LocalizedError)?.errorDescription {
+                deleteError = localized
+            } else {
+                deleteError = error.localizedDescription
+            }
+        }
+    }
+
+    @MainActor
+    private func loadProfileAsync() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let user = try await apiClient.getMyProfile()
+            displayName = user.displayName
+            phone = user.phone
+            dayStartHour = user.dayStartHour
+
+            let calendar = Calendar.current
+            selectedStartTime = calendar.date(bySettingHour: self.dayStartHour, minute: 0, second: 0, of: Date()) ?? Date()
+        } catch {
+            print("Failed to load profile: \(error)")
+        }
+    }
 }
 
-// MARK: - Create Hive From Habit View
-struct CreateHiveFromHabitView: View {
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel = CreateHiveViewModel()
-    @State private var selectedHabitId: String?
-    @State private var hiveName = ""
-    @State private var isLoading = false
-    @State private var errorMessage = ""
+class CreateHiveViewModel: ObservableObject {
+    @Published var habits: [Habit] = []
+    @Published var isLoading = false
 
-    let onComplete: (Hive) -> Void
+    private let apiClient = FastAPIClient.shared
+
+    func loadHabits() {
+        Task {
+            await loadHabitsAsync()
+        }
+    }
+
+    func createHive(from habitId: String, name: String, completion: @escaping (Result<Hive, APIError>) -> Void) {
+        Task {
+            do {
+                let hive = try await apiClient.createHiveFromHabit(habitId: habitId, name: name, backfillDays: 30)
+                completion(.success(hive))
+            } catch let error as APIError {
+                completion(.failure(error))
+            } catch {
+                completion(.failure(.networkError(error.localizedDescription)))
+            }
+        }
+    }
+
+    @MainActor
+    private func loadHabitsAsync() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let habits = try await apiClient.getHabits(includeLogs: false, days: 1)
+            self.habits = habits.filter { $0.isActive }
+        } catch {
+            self.habits = []
+        }
+    }
+}
+
+#Preview {
+    MainTabView()
+}
+
+// MARK: - Year Heatmap View
+struct YearHeatmapView: View {
+    let data: [String: Int]
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: HiveSpacing.lg) {
-                Text("Select a habit to create a hive from")
-                    .font(HiveTypography.body)
-                    .foregroundColor(HiveColors.slateText)
-                    .padding(.top)
-
-                if viewModel.isLoading {
-                    ProgressView()
-                        .padding()
-                } else {
-                    ScrollView {
-                        VStack(spacing: HiveSpacing.sm) {
-                            ForEach(viewModel.habits) { habit in
-                                HabitSelectionRow(
-                                    habit: habit,
-                                    isSelected: selectedHabitId == habit.id
-                                ) {
-                                    selectedHabitId = habit.id
-                                    if hiveName.isEmpty {
-                                        hiveName = "\(habit.name) Hive"
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                }
-
-                TextField("Hive Name", text: $hiveName)
-                    .font(HiveTypography.body)
-                    .foregroundColor(HiveColors.slateText)
-                    .padding(HiveSpacing.sm)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(HiveRadius.medium)
-
-                Button(action: createHive) {
-                    HStack {
-                        if isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        } else {
-                            Text("Create Hive")
-                            Image(systemName: "plus.circle.fill")
-                        }
-                    }
-                    .font(HiveTypography.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, HiveSpacing.md)
-                    .background(
-                        LinearGradient(
-                            colors: [HiveColors.honeyGradientStart, HiveColors.honeyGradientEnd],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        .opacity(canCreate ? 1 : 0.5)
-                    )
-                    .cornerRadius(HiveRadius.large)
-                }
-                .disabled(!canCreate || isLoading)
-
-                Spacer()
-            }
-            .padding(HiveSpacing.lg)
-            .navigationTitle("Create Hive")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .onAppear {
-            viewModel.loadHabits()
-        }
-    }
-
-    private var canCreate: Bool {
-        !hiveName.isEmpty && selectedHabitId != nil
-    }
-
-    private func createHive() {
-        guard let habitId = selectedHabitId else { return }
-
-        isLoading = true
-        viewModel.createHive(from: habitId, name: hiveName) { hive in
-            onComplete(hive)
-            dismiss()
-        }
+        Text("Year Overview")
+            .font(HiveTypography.body)
+            .foregroundColor(HiveColors.beeBlack.opacity(0.6))
     }
 }
 
@@ -1414,88 +1512,236 @@ struct CreateHiveFromHabitView: View {
 struct HabitSelectionRow: View {
     let habit: Habit
     let isSelected: Bool
-    let onTap: () -> Void
+    let theme: AppTheme
+    let action: () -> Void
 
     var body: some View {
-        HStack {
-            Circle()
-                .fill(habit.color.opacity(0.2))
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Text(habit.emoji ?? "🎯")
-                        .font(.system(size: 20))
-                )
+        Button(action: action) {
+            HStack(spacing: HiveSpacing.md) {
+                Text(habit.emoji ?? "🐝")
+                    .font(.system(size: 28))
 
-            VStack(alignment: .leading) {
-                Text(habit.name)
-                    .font(HiveTypography.body)
-                    .foregroundColor(HiveColors.slateText)
+                VStack(alignment: .leading, spacing: HiveSpacing.xs) {
+                    Text(habit.name)
+                        .font(HiveTypography.body)
+                        .foregroundColor(theme.primaryTextColor)
+                        .multilineTextAlignment(.leading)
 
-                Text(habit.type == .counter ? "Counter: \(habit.targetPerDay)/day" : "Daily habit")
-                    .font(HiveTypography.caption)
-                    .foregroundColor(HiveColors.slateText.opacity(0.7))
+                    Text("\(habit.targetPerDay) per day")
+                        .font(HiveTypography.caption)
+                        .foregroundColor(theme.secondaryTextColor)
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(HiveColors.honeyGradientEnd)
+                } else {
+                    Circle()
+                        .stroke(HiveColors.borderColor, lineWidth: 2)
+                        .frame(width: 24, height: 24)
+                }
             }
+            .padding(HiveSpacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: HiveRadius.large)
+                    .fill(isSelected ? HiveColors.honeyGradientEnd.opacity(0.1) : theme.cardBackgroundColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: HiveRadius.large)
+                            .stroke(isSelected ? HiveColors.honeyGradientEnd : HiveColors.borderColor.opacity(0.5), lineWidth: 1.5)
+                    )
+                    .shadow(color: Color.black.opacity(theme == .night ? 0.4 : 0.05), radius: 10, x: 0, y: 4)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
 
-            Spacer()
+// MARK: - Shared Card Components
+struct SummaryCard: View {
+    let overallCompletion: Double
+    let completedToday: Int
 
-            if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(HiveColors.honeyGradientEnd)
-            } else {
-                Image(systemName: "circle")
-                    .foregroundColor(Color.gray.opacity(0.5))
+    var body: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("Overall Completion")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(HiveColors.beeBlack)
+
+            VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+                HStack(alignment: .lastTextBaseline) {
+                    Text(String(format: "%.0f%%", overallCompletion))
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .foregroundColor(HiveColors.beeBlack)
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: HiveSpacing.xs) {
+                        Text("Today")
+                            .font(HiveTypography.caption)
+                            .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                        Text("\(completedToday) logged")
+                            .font(HiveTypography.caption)
+                            .foregroundColor(HiveColors.honeyGradientEnd)
+                    }
+                }
+
+                ProgressView(value: min(max(overallCompletion / 100, 0), 1))
+                    .tint(HiveColors.mintSuccess)
+                    .scaleEffect(x: 1, y: 2, anchor: .center)
             }
         }
-        .padding()
+        .padding(HiveSpacing.lg)
         .background(
-            RoundedRectangle(cornerRadius: HiveRadius.medium)
-                .fill(isSelected ? HiveColors.honeyGradientStart.opacity(0.1) : Color.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: HiveRadius.medium)
-                        .stroke(isSelected ? HiveColors.honeyGradientEnd : Color.gray.opacity(0.2))
-                )
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
         )
-        .onTapGesture {
-            onTap()
+    }
+}
+
+struct WeeklyProgressCard: View {
+    let weeklyProgress: [Int]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("This Week")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(HiveColors.beeBlack)
+
+            HStack(alignment: .bottom, spacing: HiveSpacing.sm) {
+                let labels = ["S","M","T","W","T","F","S"]
+                let maxValue = max(weeklyProgress.max() ?? 1, 1)
+                ForEach(Array(weeklyProgress.enumerated()), id: \.offset) { index, value in
+                    VStack(spacing: HiveSpacing.xs) {
+                        RoundedRectangle(cornerRadius: HiveRadius.small)
+                            .fill(HiveColors.honeyGradientEnd.opacity(0.85))
+                            .frame(width: 24, height: max(CGFloat(value) / CGFloat(maxValue), 0.05) * 90)
+
+                        Text(labels[index % labels.count])
+                            .font(HiveTypography.caption)
+                            .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .padding(HiveSpacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+        )
+    }
+}
+
+struct StreaksCard: View {
+    let currentStreaks: [HabitStreakDisplay]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("Current Streaks")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(HiveColors.beeBlack)
+
+            if currentStreaks.isEmpty {
+                Text("No streaks yet — start pouring honey!")
+                    .font(HiveTypography.body)
+                    .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+            } else {
+                VStack(spacing: HiveSpacing.sm) {
+                    ForEach(currentStreaks) { streak in
+                        HStack(spacing: HiveSpacing.md) {
+                            Text(streak.emoji ?? "🐝")
+                                .font(.system(size: 28))
+                            Text(streak.name)
+                                .font(HiveTypography.body)
+                                .foregroundColor(HiveColors.beeBlack)
+                            Spacer()
+                            Text("\(streak.streak) 🔥")
+                                .font(HiveTypography.headline)
+                                .foregroundColor(HiveColors.honeyGradientEnd)
+                        }
+                        .padding(HiveSpacing.md)
+                        .background(
+                            RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                .fill(HiveColors.lightGray)
+                        )
+                    }
+                }
+            }
+        }
+        .padding(HiveSpacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+        )
+    }
+}
+
+struct YearOverviewCard: View {
+    let yearData: [String: Int]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("Year Overview")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(HiveColors.beeBlack)
+
+            YearHeatmapView(data: yearData)
+        }
+        .padding(HiveSpacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+        )
+    }
+}
+
+struct BestHabitCard: View {
+    let bestPerformer: HabitPerformanceSummary?
+
+    var body: some View {
+        Group {
+            if let best = bestPerformer {
+                VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+                    Text("Best Performing")
+                        .font(HiveTypography.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(HiveColors.beeBlack)
+
+                    HStack(spacing: HiveSpacing.md) {
+                        Text(best.emoji ?? "🏆")
+                            .font(.system(size: 32))
+
+                        VStack(alignment: .leading, spacing: HiveSpacing.xs) {
+                            Text(best.name)
+                                .font(HiveTypography.body)
+                                .foregroundColor(HiveColors.beeBlack)
+
+                            Text(String(format: "%.0f%% completion", best.completionRate))
+                                .font(HiveTypography.caption)
+                                .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                        }
+
+                        Spacer()
+                    }
+                }
+                .padding(HiveSpacing.lg)
+                .background(
+                    RoundedRectangle(cornerRadius: HiveRadius.large)
+                        .fill(Color.white)
+                        .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+                )
+            }
         }
     }
-}
-
-// MARK: - Create Hive View Model
-class CreateHiveViewModel: ObservableObject {
-    @Published var habits: [Habit] = []
-    @Published var isLoading = false
-
-    private let apiClient = APIClient.shared
-    private var cancellables = Set<AnyCancellable>()
-
-    func loadHabits() {
-        isLoading = true
-
-        apiClient.getHabits(includeLogs: false, days: 1)
-            .sink(
-                receiveCompletion: { _ in
-                    self.isLoading = false
-                },
-                receiveValue: { habits in
-                    self.habits = habits.filter { $0.isActive }
-                }
-            )
-            .store(in: &cancellables)
-    }
-
-    func createHive(from habitId: String, name: String, completion: @escaping (Hive) -> Void) {
-        apiClient.createHiveFromHabit(habitId: habitId, name: name, backfillDays: 30)
-            .sink(
-                receiveCompletion: { _ in },
-                receiveValue: { hive in
-                    completion(hive)
-                }
-            )
-            .store(in: &cancellables)
-    }
-}
-
-#Preview {
-    MainTabView()
 }

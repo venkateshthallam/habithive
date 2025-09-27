@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from app.models.schemas import ActivityEvent
 from app.core.auth import get_current_user
-from app.core.supabase import get_supabase_client
+from app.core.supabase import get_user_supabase_client
 from app.core.config import settings
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -80,7 +80,7 @@ async def get_activity_feed(
         return result
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Get user's hive IDs
         member_response = supabase.table("hive_members").select("hive_id").eq("user_id", user_id).execute()
@@ -152,7 +152,7 @@ async def create_activity_event(
         return ActivityEvent(**new_event)
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         event_data = {
             "actor_id": user_id,

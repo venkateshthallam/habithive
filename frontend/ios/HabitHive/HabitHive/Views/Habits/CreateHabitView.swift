@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 struct CreateHabitView: View {
     @Environment(\.dismiss) private var dismiss
@@ -307,8 +306,7 @@ class CreateHabitViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage = ""
     
-    private let apiClient = APIClient.shared
-    private var cancellables = Set<AnyCancellable>()
+    private let apiClient = FastAPIClient.shared
     
     init() {
         // Initialize with default values
@@ -346,21 +344,20 @@ class CreateHabitViewModel: ObservableObject {
         
         print("📝 Creating habit: \(name) with emoji: \(emoji) and color: \(colorHex)")
         
-        apiClient.createHabit(request)
-            .sink(
-                receiveCompletion: { result in
+        Task {
+            do {
+                let habit = try await apiClient.createHabit(request)
+                await MainActor.run {
                     self.isLoading = false
-                    if case .failure(let error) = result {
-                        print("❌ Failed to create habit: \(error)")
-                        self.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { habit in
-                    print("✅ Habit created successfully: \(habit.name)")
                     completion(habit)
                 }
-            )
-            .store(in: &cancellables)
+            } catch {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 }
 

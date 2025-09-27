@@ -13,7 +13,7 @@ struct ContactsManager {
         }
     }
 
-    func fetchPhoneHashes(pepper: String, defaultRegion: String = "US") -> [String] {
+    func fetchPhoneHashes(pepper: String = SupabaseConfiguration.contactPepper, defaultRegion: String = "US") -> [String] {
         let store = CNContactStore()
         let keys = [CNContactPhoneNumbersKey as CNKeyDescriptor]
         let request = CNContactFetchRequest(keysToFetch: keys)
@@ -55,4 +55,3 @@ struct ContactsManager {
         return digest.compactMap { String(format: "%02x", $0) }.joined()
     }
 }
-

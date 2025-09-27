@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from app.core.auth import get_current_user
-from app.core.supabase import get_supabase_client
+from app.core.supabase import get_user_supabase_client
 
 router = APIRouter()
 
@@ -21,7 +21,7 @@ async def upload_contacts(
     """Upload hashed contacts for matching."""
     user_id = current_user["id"]
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         rows = [
             {
                 "user_id": user_id,

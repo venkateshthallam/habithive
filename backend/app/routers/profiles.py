@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from app.models.schemas import Profile, ProfileUpdate
 from app.core.auth import get_current_user
-from app.core.supabase import get_supabase_client
+from app.core.supabase import get_user_supabase_client
 from app.core.config import settings
 from typing import Dict, Any
 from datetime import datetime
@@ -16,27 +16,22 @@ test_profiles = {}
 async def get_my_profile(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Get current user's profile"""
     user_id = current_user["id"]
-    
-    if settings.TEST_MODE:
-        # Return test profile
-        if user_id not in test_profiles:
-            test_profiles[user_id] = {
-                "id": user_id,
-                "display_name": f"Bee {user_id[:6]}",
-                "avatar_url": None,
-                "timezone": "America/New_York",
-                "day_start_hour": 4,
-                "theme": "honey",
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
-            }
-        return Profile(**test_profiles[user_id])
+    print(f"Getting profile for user: {user_id}")
     
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
-        
-        if not response.data:
+        supabase = get_user_supabase_client(current_user)
+        print(f"Querying profile for user: {user_id}")
+
+        response = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        print(f"Profile query response: {response}")
+
+        if not response.data or len(response.data) == 0:
+            print(f"No profile found for user {user_id}, creating default profile")
+
+            # Use service role client for profile creation to bypass RLS
+            from app.core.supabase import get_supabase_admin
+            admin_supabase = get_supabase_admin()
+
             # Create default profile
             profile_data = {
                 "id": user_id,
@@ -45,10 +40,23 @@ async def get_my_profile(current_user: Dict[str, Any] = Depends(get_current_user
                 "day_start_hour": 4,
                 "theme": "honey"
             }
-            response = supabase.table("profiles").insert(profile_data).execute()
-        
-        return Profile(**response.data)
+            print(f"Creating profile with data: {profile_data}")
+
+            insert_response = admin_supabase.table("profiles").insert(profile_data).execute()
+            print(f"Profile insert response: {insert_response}")
+
+            if insert_response.data and len(insert_response.data) > 0:
+                return Profile(**insert_response.data[0])
+            else:
+                raise Exception("Failed to create profile - no data returned")
+
+        # Profile exists, return it
+        profile_data = response.data[0] if isinstance(response.data, list) else response.data
+        print(f"Returning existing profile: {profile_data}")
+        return Profile(**profile_data)
+
     except Exception as e:
+        print(f"Profile endpoint error: {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch profile: {str(e)}"
@@ -62,29 +70,8 @@ async def update_my_profile(
     """Update current user's profile"""
     user_id = current_user["id"]
     
-    if settings.TEST_MODE:
-        # Update test profile
-        if user_id not in test_profiles:
-            test_profiles[user_id] = {
-                "id": user_id,
-                "display_name": f"Bee {user_id[:6]}",
-                "avatar_url": None,
-                "timezone": "America/New_York",
-                "day_start_hour": 4,
-                "theme": "honey",
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
-            }
-        
-        # Apply updates
-        update_data = update.dict(exclude_unset=True)
-        test_profiles[user_id].update(update_data)
-        test_profiles[user_id]["updated_at"] = datetime.utcnow()
-        
-        return Profile(**test_profiles[user_id])
-    
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         update_data = update.dict(exclude_unset=True)
         update_data["updated_at"] = datetime.utcnow().isoformat()
         
@@ -109,23 +96,8 @@ async def get_user_profile(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Get a specific user's profile (for hive members)"""
-    if settings.TEST_MODE:
-        # Return test profile
-        if user_id not in test_profiles:
-            test_profiles[user_id] = {
-                "id": user_id,
-                "display_name": f"Bee {user_id[:6]}",
-                "avatar_url": None,
-                "timezone": "America/New_York",
-                "day_start_hour": 4,
-                "theme": "honey",
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
-            }
-        return Profile(**test_profiles[user_id])
-    
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         response = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
         
         if not response.data:

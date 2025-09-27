@@ -393,13 +393,20 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HabitHive/HabitHive.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"HabitHive/Preview Content\"";
 				DEVELOPMENT_TEAM = KBN225PW23;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_NSContactsUsageDescription = "HabitHive uses your contacts to help you find friends who also use the app, so you can support each other's habit goals. Your contact information is securely hashed and never stored in readable form.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "HabitHive connects to your local Supabase server on Wi-Fi to keep data in sync.";
+				INFOPLIST_KEY_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6bHJ1YWN3eGd0Y3Vub3h0dHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc4NjcwNjUsImV4cCI6MjA3MzQ0MzA2NX0.4jmP_rZGm0-3nxQNOXEmis2dFrOCJ9XpuCrM9mGrMvY";
+				INFOPLIST_KEY_SUPABASE_CONTACT_PEPPER = dev_contact_pepper;
+				INFOPLIST_KEY_SUPABASE_URL = "https://ezlruacwxgtcunoxttta.supabase.co";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -410,7 +417,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.HabitHive;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.habithive;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -423,13 +430,20 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HabitHive/HabitHive.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"HabitHive/Preview Content\"";
 				DEVELOPMENT_TEAM = KBN225PW23;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_NSContactsUsageDescription = "HabitHive uses your contacts to help you find friends who also use the app, so you can support each other's habit goals. Your contact information is securely hashed and never stored in readable form.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "HabitHive connects to your local Supabase server on Wi-Fi to keep data in sync.";
+				INFOPLIST_KEY_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6bHJ1YWN3eGd0Y3Vub3h0dHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc4NjcwNjUsImV4cCI6MjA3MzQ0MzA2NX0.4jmP_rZGm0-3nxQNOXEmis2dFrOCJ9XpuCrM9mGrMvY";
+				INFOPLIST_KEY_SUPABASE_CONTACT_PEPPER = dev_contact_pepper;
+				INFOPLIST_KEY_SUPABASE_URL = "https://ezlruacwxgtcunoxttta.supabase.co";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -440,7 +454,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.HabitHive;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.habithive;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -458,7 +472,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.HabitHiveTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.HabitHiveAppTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -477,7 +491,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.HabitHiveTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.HabitHiveAppTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -494,7 +508,7 @@
 				DEVELOPMENT_TEAM = KBN225PW23;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.HabitHiveUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.HabitHiveAppUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -511,7 +525,7 @@
 				DEVELOPMENT_TEAM = KBN225PW23;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.HabitHiveUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thallam.HabitHiveAppUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;

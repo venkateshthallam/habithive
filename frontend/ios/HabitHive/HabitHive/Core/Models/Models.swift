@@ -4,7 +4,7 @@ import SwiftUI
 // MARK: - User & Profile
 struct User: Codable, Identifiable {
     let id: String
-    let phone: String
+    var phone: String
     var displayName: String
     var avatarUrl: String?
     var timezone: String
@@ -389,16 +389,50 @@ struct ProfileUpdate: Codable {
 
 // MARK: - Insights Summary
 struct InsightsSummary: Codable {
+    let overallCompletion: Double
+    let activeHabits: Int
     let completedToday: Int
-    let totalHabits: Int
-    let bestStreak: Int
-    let weeklyProgress: [Int]?
-    
+    let weeklyProgress: [Int]
+    let currentStreaks: [HabitStreakDisplay]
+    let yearComb: [String: Int]
+    let bestPerforming: HabitPerformanceSummary?
+
     enum CodingKeys: String, CodingKey {
+        case overallCompletion = "overall_completion"
+        case activeHabits = "active_habits"
         case completedToday = "completed_today"
-        case totalHabits = "total_habits"
-        case bestStreak = "best_streak"
         case weeklyProgress = "weekly_progress"
+        case currentStreaks = "current_streaks"
+        case yearComb = "year_comb"
+        case bestPerforming = "best_performing"
+    }
+}
+
+struct HabitStreakDisplay: Codable, Identifiable {
+    let id: UUID
+    let name: String
+    let emoji: String?
+    let streak: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id = "habit_id"
+        case name
+        case emoji
+        case streak
+    }
+}
+
+struct HabitPerformanceSummary: Codable {
+    let id: UUID
+    let name: String
+    let emoji: String?
+    let completionRate: Double
+
+    enum CodingKeys: String, CodingKey {
+        case id = "habit_id"
+        case name
+        case emoji
+        case completionRate = "completion_rate"
     }
 }
 

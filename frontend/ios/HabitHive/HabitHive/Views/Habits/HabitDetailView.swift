@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 struct HabitDetailView: View {
     let habit: Habit
@@ -9,6 +8,12 @@ struct HabitDetailView: View {
     @State private var selectedMonth = Date()
     @State private var showEditSheet = false
     @State private var showDeleteAlert = false
+    @State private var currentHabit: Habit
+
+    init(habit: Habit) {
+        self.habit = habit
+        _currentHabit = State(initialValue: habit)
+    }
     
     var body: some View {
         NavigationStack {
@@ -33,7 +38,7 @@ struct HabitDetailView: View {
                     .padding(HiveSpacing.md)
                 }
             }
-            .navigationTitle(habit.name)
+            .navigationTitle(currentHabit.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -54,10 +59,13 @@ struct HabitDetailView: View {
         .onAppear {
             viewModel.loadHabitDetails(habitId: habit.id)
         }
+        .onReceive(viewModel.$habit.compactMap { $0 }) { updated in
+            currentHabit = updated
+        }
         .alert("Delete Habit", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
-                viewModel.deleteHabit(habitId: habit.id) {
+                viewModel.deleteHabit(habitId: currentHabit.id) {
                     dismiss()
                 }
             }
@@ -73,31 +81,31 @@ struct HabitDetailView: View {
             // Emoji & Progress
             ZStack {
                 Circle()
-                    .fill(habit.color.opacity(0.2))
+                    .fill(currentHabit.color.opacity(0.2))
                     .frame(width: 100, height: 100)
                 
-                if habit.type == .counter {
+                if currentHabit.type == .counter {
                     ZStack {
                         Circle()
                             .stroke(Color.gray.opacity(0.2), lineWidth: 6)
                         
                         Circle()
                             .trim(from: 0, to: viewModel.todayProgress)
-                            .stroke(habit.color, lineWidth: 6)
+                            .stroke(currentHabit.color, lineWidth: 6)
                             .rotationEffect(.degrees(-90))
                             .animation(.easeInOut, value: viewModel.todayProgress)
                     }
                     .frame(width: 100, height: 100)
                 }
                 
-                Text(habit.emoji ?? "🎯")
+                Text(currentHabit.emoji ?? "🎯")
                     .font(.system(size: 50))
             }
             
             // Today's Status
-            if habit.type == .counter {
+            if currentHabit.type == .counter {
                 VStack(spacing: HiveSpacing.xs) {
-                    Text("\(viewModel.todayValue) / \(habit.targetPerDay)")
+                    Text("\(viewModel.todayValue) / \(currentHabit.targetPerDay)")
                         .font(HiveTypography.title2)
                         .foregroundColor(HiveColors.slateText)
                     
@@ -119,23 +127,19 @@ struct HabitDetailView: View {
             
             // Log Button
             Button(action: {
-                viewModel.logHabit(habitId: habit.id, value: 1)
+                viewModel.toggleToday(for: currentHabit)
             }) {
                 HStack {
-                    Image(systemName: habit.type == .checkbox ? "checkmark" : "plus")
-                    Text(habit.type == .checkbox ? "Mark Complete" : "Add +1")
+                    Image(systemName: viewModel.isCompletedToday ? "arrow.uturn.backward" : (currentHabit.type == .checkbox ? "checkmark" : "drop.fill"))
+                    Text(viewModel.isCompletedToday ? "Unmark Today" : (currentHabit.type == .checkbox ? "Mark Complete" : "Add +\(currentHabit.targetPerDay)"))
                 }
                 .font(HiveTypography.headline)
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, HiveSpacing.sm)
-                .background(
-                    themeManager.currentTheme.primaryGradient
-                        .opacity(viewModel.isCompletedToday && habit.type == .checkbox ? 0.5 : 1)
-                )
+                .background(themeManager.currentTheme.primaryGradient)
                 .cornerRadius(HiveRadius.medium)
             }
-            .disabled(viewModel.isCompletedToday && habit.type == .checkbox)
         }
         .padding(HiveSpacing.lg)
         .background(
@@ -149,16 +153,16 @@ struct HabitDetailView: View {
         HStack(spacing: HiveSpacing.sm) {
             StatCard(
                 title: "Current Streak",
-                value: "\(habit.currentStreak ?? 0)",
+                value: "\(currentHabit.currentStreak ?? 0)",
                 icon: "flame.fill",
                 color: .orange
             )
             
             StatCard(
                 title: "Completion",
-                value: "\(Int(habit.completionRate ?? 0))%",
+                value: "\(Int(currentHabit.completionRate ?? 0))%",
                 icon: "chart.pie.fill",
-                color: habit.color
+                color: currentHabit.color
             )
             
             StatCard(
@@ -222,7 +226,7 @@ struct HabitDetailView: View {
         VStack(spacing: HiveSpacing.sm) {
             // Convert to Hive
             Button(action: {
-                viewModel.convertToHive(habitId: habit.id)
+                viewModel.convertToHive(habitId: currentHabit.id)
             }) {
                 HStack {
                     Image(systemName: "person.2.fill")
@@ -355,12 +359,12 @@ struct MonthCalendarView: View {
     }
     
     private func isDateCompleted(_ date: Date) -> Bool {
-        let dateString = date.formatted(.dateTime.year().month().day())
+        let dateString = DateFormatter.hiveDayFormatter.string(from: date)
         return logs.contains { $0.logDate == dateString }
     }
     
     private func getValueForDate(_ date: Date) -> Int {
-        let dateString = date.formatted(.dateTime.year().month().day())
+        let dateString = DateFormatter.hiveDayFormatter.string(from: date)
         return logs.first { $0.logDate == dateString }?.value ?? 0
     }
 }
@@ -421,83 +425,126 @@ struct DayCell: View {
 
 // MARK: - View Model
 class HabitDetailViewModel: ObservableObject {
+    @Published var habit: Habit?
     @Published var logs: [HabitLog] = []
     @Published var todayValue = 0
     @Published var isCompletedToday = false
     @Published var totalDays = 0
     @Published var isLoading = false
-    
-    private let apiClient = APIClient.shared
-    private var cancellables = Set<AnyCancellable>()
-    
+    @Published var errorMessage = ""
+
+    private let apiClient = FastAPIClient.shared
+
     var todayProgress: CGFloat {
-        // For counter habits
-        return CGFloat(todayValue) / 8.0 // Assuming target of 8
+        guard let habit else { return isCompletedToday ? 1 : 0 }
+        guard habit.type == .counter else { return isCompletedToday ? 1 : 0 }
+        let target = max(habit.targetPerDay, 1)
+        return CGFloat(min(todayValue, target)) / CGFloat(target)
     }
-    
+
     func loadHabitDetails(habitId: String) {
-        isLoading = true
-        
-        apiClient.getHabits(includeLogs: true, days: 365)
-            .sink(
-                receiveCompletion: { _ in
-                    self.isLoading = false
-                },
-                receiveValue: { habits in
-                    if let habit = habits.first(where: { $0.id == habitId }) {
-                        self.logs = habit.recentLogs ?? []
-                        self.calculateStats()
-                    }
-                }
-            )
-            .store(in: &cancellables)
+        Task { await loadHabitDetailsAsync(habitId: habitId) }
     }
-    
-    private func calculateStats() {
-        let today = Date().formatted(.dateTime.year().month().day())
-        
+
+    @MainActor
+    private func loadHabitDetailsAsync(habitId: String) async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let habit = try await apiClient.getHabit(habitId: habitId, includeLogs: true)
+            self.habit = habit
+            self.logs = habit.recentLogs ?? []
+            self.calculateStats(for: habit)
+            let history = try await fetchLogs(habitId: habitId)
+            self.logs = history.sorted { $0.logDate < $1.logDate }
+            self.calculateStats(for: habit)
+        } catch {
+            self.errorMessage = error.localizedDescription
+        }
+    }
+
+    private func fetchLogs(habitId: String) async throws -> [HabitLog] {
+        let startDate = Calendar.current.date(byAdding: .month, value: -12, to: Date())
+        return try await apiClient.getHabitLogs(habitId: habitId, startDate: startDate, endDate: Date())
+    }
+
+    private func calculateStats(for habit: Habit) {
+        let today = DateFormatter.hiveDayFormatter.string(from: Date())
         if let todayLog = logs.first(where: { $0.logDate == today }) {
             todayValue = todayLog.value
-            isCompletedToday = true
+            let threshold = habit.type == .counter ? habit.targetPerDay : 1
+            isCompletedToday = todayLog.value >= max(threshold, 1)
+        } else {
+            todayValue = 0
+            isCompletedToday = false
         }
-        
+
         totalDays = logs.count
     }
-    
-    func logHabit(habitId: String, value: Int) {
-        apiClient.logHabit(habitId: habitId, value: value)
-            .sink(
-                receiveCompletion: { _ in },
-                receiveValue: { _ in
-                    self.loadHabitDetails(habitId: habitId)
+
+    func toggleToday(for habit: Habit) {
+        let todayString = DateFormatter.hiveDayFormatter.string(from: Date())
+
+        if let existingIndex = logs.firstIndex(where: { $0.logDate == todayString }) {
+            let removedLog = logs.remove(at: existingIndex)
+            calculateStats(for: habit)
+
+            let logDate = DateFormatter.hiveDayFormatter.date(from: removedLog.logDate)
+            Task {
+                do {
+                    try await apiClient.deleteHabitLog(habitId: habit.id, logDate: logDate)
+                    await loadHabitDetailsAsync(habitId: habit.id)
+                } catch {
+                    await MainActor.run { self.errorMessage = error.localizedDescription }
                 }
+            }
+        } else {
+            let value = habit.type == .counter ? habit.targetPerDay : 1
+            let provisionalLog = HabitLog(
+                id: UUID().uuidString,
+                habitId: habit.id,
+                userId: habit.userId,
+                logDate: todayString,
+                value: value,
+                source: "manual",
+                createdAt: Date()
             )
-            .store(in: &cancellables)
+            logs.append(provisionalLog)
+            logs.sort { $0.logDate < $1.logDate }
+            calculateStats(for: habit)
+
+            Task {
+                do {
+                    _ = try await apiClient.logHabit(habitId: habit.id, value: value)
+                    await loadHabitDetailsAsync(habitId: habit.id)
+                } catch {
+                    await MainActor.run { self.errorMessage = error.localizedDescription }
+                }
+            }
+        }
     }
-    
+
     func deleteHabit(habitId: String, completion: @escaping () -> Void) {
-        apiClient.deleteHabit(habitId: habitId)
-            .sink(
-                receiveCompletion: { _ in },
-                receiveValue: { success in
-                    if success {
-                        completion()
-                    }
-                }
-            )
-            .store(in: &cancellables)
+        Task {
+            do {
+                try await apiClient.deleteHabit(habitId: habitId)
+                await MainActor.run { completion() }
+            } catch {
+                await MainActor.run { self.errorMessage = error.localizedDescription }
+            }
+        }
     }
-    
+
     func convertToHive(habitId: String) {
-        apiClient.createHiveFromHabit(habitId: habitId, name: nil, backfillDays: 30)
-            .sink(
-                receiveCompletion: { _ in },
-                receiveValue: { hive in
-                    // Navigate to hive or show success
-                    print("Created hive: \(hive.id)")
-                }
-            )
-            .store(in: &cancellables)
+        Task {
+            do {
+                let hive = try await apiClient.createHiveFromHabit(habitId: habitId, name: nil, backfillDays: 30)
+                print("Created hive: \(hive.id)")
+            } catch {
+                await MainActor.run { self.errorMessage = error.localizedDescription }
+            }
+        }
     }
 }
 

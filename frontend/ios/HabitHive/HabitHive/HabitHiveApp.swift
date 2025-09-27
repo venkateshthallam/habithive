@@ -9,7 +9,7 @@ import SwiftUI
 
 @main
 struct HabitHiveApp: App {
-    @StateObject private var apiClient = APIClient.shared
+    @StateObject private var apiClient = FastAPIClient.shared
     
     init() {
         // Improve tab bar contrast and visibility
@@ -25,10 +25,23 @@ struct HabitHiveApp: App {
     
     var body: some Scene {
         WindowGroup {
-            if apiClient.isAuthenticated {
-                MainTabView()
-            } else {
-                WelcomeView()
+            Group {
+                if apiClient.isAuthenticated {
+                    if !apiClient.hasLoadedProfile {
+                        ProgressView("Loading your hive…")
+                            .progressViewStyle(.circular)
+                            .tint(HiveColors.honeyGradientEnd)
+                    } else if apiClient.requiresProfileSetup {
+                        ProfileSetupFlowView()
+                    } else {
+                        MainTabView()
+                    }
+                } else {
+                    WelcomeView()
+                }
+            }
+            .task(id: apiClient.isAuthenticated) {
+                await apiClient.bootstrapIfNeeded()
             }
         }
     }

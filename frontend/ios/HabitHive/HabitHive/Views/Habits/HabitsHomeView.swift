@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -74,9 +73,7 @@ struct HabitsHomeView: View {
         }
         .sheet(isPresented: $showCreateHabit) {
             CreateHabitView { newHabit in
-                Task {
-                    await viewModel.refreshHabits()
-                }
+                viewModel.addHabitOptimistically(newHabit)
             }
         }
         .sheet(item: $selectedHabit) { habit in
@@ -189,11 +186,21 @@ struct HabitsHomeView: View {
     // MARK: - Actions
     
     private func handleBeeButtonTap(_ habit: Habit) {
-        viewModel.optimisticLog(habitId: habit.id)
-        viewModel.logHabit(habitId: habit.id, value: 1)
-
-        honeyPourHabitId = habit.id
-        showHoneyPour = true
+        let todayLog = viewModel.todayLog(for: habit.id)
+        if let log = todayLog {
+            let removed = viewModel.optimisticToggle(habit: habit, value: log.value, adding: false)
+            if removed {
+                viewModel.deleteHabitLog(habitId: habit.id, logDateString: log.logDate)
+            }
+        } else {
+            let value = habit.type == .counter ? habit.targetPerDay : 1
+            let added = viewModel.optimisticToggle(habit: habit, value: value, adding: true)
+            if added {
+                viewModel.logHabit(habitId: habit.id, value: value)
+                honeyPourHabitId = habit.id
+                showHoneyPour = true
+            }
+        }
     }
 
     private func handleHabitLongPress(_ habit: Habit) {
@@ -601,7 +608,7 @@ struct HexagonMiniShape: Shape {
 }
 
 // MARK: - Date Formatter Helper
-private extension DateFormatter {
+extension DateFormatter {
     static let hiveDayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -617,13 +624,12 @@ class HabitsViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage = ""
     
-    private let apiClient = APIClient.shared
-    private var cancellables = Set<AnyCancellable>()
+    private let apiClient = FastAPIClient.shared
     
     var completedToday: Int {
         habits.filter { habit in
             if let logs = habit.recentLogs {
-                let today = Date().formatted(.dateTime.year().month().day())
+                let today = DateFormatter.hiveDayFormatter.string(from: Date())
                 return logs.contains { $0.logDate == today }
             }
             return false
@@ -635,48 +641,64 @@ class HabitsViewModel: ObservableObject {
     }
     
     func loadHabits() {
-        isLoading = true
-        
-        apiClient.getHabits(includeLogs: true, days: 30)
-            .sink(
-                receiveCompletion: { completion in
-                    self.isLoading = false
-                    if case .failure(let error) = completion {
-                        self.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { habits in
-                    self.habits = habits
-                }
-            )
-            .store(in: &cancellables)
+        Task { await loadHabitsAsync() }
     }
 
-    func optimisticLog(habitId: String) {
-        if let idx = habits.firstIndex(where: { $0.id == habitId }) {
-            var habit = habits[idx]
-            var logs = habit.recentLogs ?? []
-            let today = Date().formatted(.dateTime.year().month().day())
-            if !logs.contains(where: { $0.logDate == today }) {
-                // Create a lightweight local log entry for UI purposes
-                let new = HabitLog(
-                    id: UUID().uuidString,
-                    habitId: habit.id,
-                    userId: habit.userId,
-                    logDate: today,
-                    value: 1,
-                    source: "manual",
-                    createdAt: Date()
-                )
-                logs.append(new)
-                habit.recentLogs = logs
-                habits[idx] = habit
-            }
+    @discardableResult
+    func optimisticToggle(habit: Habit, value: Int, adding: Bool) -> Bool {
+        guard let idx = habits.firstIndex(where: { $0.id == habit.id }) else {
+            return false
         }
+
+        var habitCopy = habits[idx]
+        var logs = habitCopy.recentLogs ?? []
+        let today = DateFormatter.hiveDayFormatter.string(from: Date())
+
+        if let existingIndex = logs.firstIndex(where: { $0.logDate == today }) {
+            if adding {
+                // Already logged; do nothing
+                return false
+            }
+            logs.remove(at: existingIndex)
+            habitCopy.recentLogs = logs
+            habits[idx] = habitCopy
+            return true
+        } else {
+            guard adding else { return false }
+            let newLog = HabitLog(
+                id: UUID().uuidString,
+                habitId: habitCopy.id,
+                userId: habitCopy.userId,
+                logDate: today,
+                value: value,
+                source: "manual",
+                createdAt: Date()
+            )
+            logs.append(newLog)
+            habitCopy.recentLogs = logs
+            habits[idx] = habitCopy
+            return true
+        }
+    }
+
+    func todayLog(for habitId: String) -> HabitLog? {
+        guard let habit = habits.first(where: { $0.id == habitId }) else { return nil }
+        let today = DateFormatter.hiveDayFormatter.string(from: Date())
+        return habit.recentLogs?.first(where: { $0.logDate == today })
     }
     
     func refreshHabits() async {
         await loadHabitsAsync()
+    }
+
+    func addHabitOptimistically(_ habit: Habit) {
+        // Add the habit to the beginning of the list for immediate display
+        habits.insert(habit, at: 0)
+
+        // Refresh the habits list to get the latest data from server
+        Task {
+            await refreshHabits()
+        }
     }
 
     @MainActor
@@ -684,20 +706,7 @@ class HabitsViewModel: ObservableObject {
         isLoading = true
 
         do {
-            let habits = try await withCheckedThrowingContinuation { continuation in
-                apiClient.getHabits(includeLogs: true, days: 30)
-                    .sink(
-                        receiveCompletion: { completion in
-                            if case .failure(let error) = completion {
-                                continuation.resume(throwing: error)
-                            }
-                        },
-                        receiveValue: { habits in
-                            continuation.resume(returning: habits)
-                        }
-                    )
-                    .store(in: &cancellables)
-            }
+            let habits = try await apiClient.getHabits(includeLogs: true, days: 30)
             self.habits = habits
         } catch {
             self.errorMessage = error.localizedDescription
@@ -707,39 +716,37 @@ class HabitsViewModel: ObservableObject {
     }
     
     func logHabit(habitId: String, value: Int) {
-        apiClient.logHabit(habitId: habitId, value: value)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        self.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { _ in
-                    // Refresh habits to get updated logs
-                    Task {
-                        await self.refreshHabits()
-                    }
-                }
-            )
-            .store(in: &cancellables)
+        Task {
+            do {
+                _ = try await apiClient.logHabit(habitId: habitId, value: value)
+                await refreshHabits()
+            } catch {
+                await MainActor.run { self.errorMessage = error.localizedDescription }
+            }
+        }
+    }
+
+    func deleteHabitLog(habitId: String, logDateString: String) {
+        let logDate = DateFormatter.hiveDayFormatter.date(from: logDateString)
+        Task {
+            do {
+                try await apiClient.deleteHabitLog(habitId: habitId, logDate: logDate)
+                await refreshHabits()
+            } catch {
+                await MainActor.run { self.errorMessage = error.localizedDescription }
+            }
+        }
     }
     
     func deleteHabit(habitId: String) {
-        apiClient.deleteHabit(habitId: habitId)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        self.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { _ in
-                    // Refresh habits after deletion
-                    Task {
-                        await self.refreshHabits()
-                    }
-                }
-            )
-            .store(in: &cancellables)
+        Task {
+            do {
+                try await apiClient.deleteHabit(habitId: habitId)
+                await refreshHabits()
+            } catch {
+                await MainActor.run { self.errorMessage = error.localizedDescription }
+            }
+        }
     }
 }
 

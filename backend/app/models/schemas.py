@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict
 from datetime import datetime, date, time
 from uuid import UUID
 from enum import Enum
@@ -27,6 +27,10 @@ class PhoneAuthRequest(BaseModel):
 class VerifyOTPRequest(BaseModel):
     phone: str
     otp: str
+
+class AppleSignInRequest(BaseModel):
+    id_token: str
+    nonce: Optional[str] = None
 
 class AuthResponse(BaseModel):
     access_token: str
@@ -207,8 +211,25 @@ class HiveDetail(Hive):
     today_status: dict = {}
     recent_activity: List[ActivityEvent] = []
 
+class HabitStreakSummary(BaseModel):
+    habit_id: UUID
+    name: str
+    emoji: Optional[str] = None
+    streak: int
+
+
+class HabitPerformance(BaseModel):
+    habit_id: UUID
+    name: str
+    emoji: Optional[str] = None
+    completion_rate: float
+
+
 class InsightsResponse(BaseModel):
     overall_completion: float
     active_habits: int
-    current_streaks: dict
-    year_comb: dict
+    completed_today: int
+    weekly_progress: List[int]
+    current_streaks: List[HabitStreakSummary]
+    year_comb: Dict[str, int]
+    best_performing: Optional[HabitPerformance] = None

@@ -2,14 +2,15 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 from app.models.schemas import (
     Habit, HabitCreate, HabitUpdate, HabitWithLogs,
     HabitLog, HabitLogCreate, LogHabitRequest,
-    InsightsResponse
+    HabitStreakSummary, HabitPerformance, InsightsResponse
 )
 from app.core.auth import get_current_user
-from app.core.supabase import get_supabase_client
+from app.core.supabase import get_user_supabase_client
 from app.core.config import settings
 from typing import Dict, Any, List, Optional
 from datetime import datetime, date, timedelta
 import uuid
+
 
 router = APIRouter()
 
@@ -78,7 +79,7 @@ async def get_habits(
         return result
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Get habits
         response = supabase.table("habits").select("*").eq("user_id", user_id).eq("is_active", True).execute()
@@ -144,7 +145,7 @@ async def create_habit(
         )
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         habit_data = {
             "user_id": user_id,
             **habit.dict()
@@ -184,7 +185,7 @@ async def get_habit(
         return habit_with_logs
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         response = supabase.table("habits").select("*").eq("id", habit_id).eq("user_id", user_id).single().execute()
         
         if not response.data:
@@ -229,7 +230,7 @@ async def update_habit(
         return Habit(**habit)
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         update_data = update.dict(exclude_unset=True)
         update_data["updated_at"] = datetime.utcnow().isoformat()
         
@@ -268,7 +269,7 @@ async def delete_habit(
         return {"success": True, "message": "Habit archived"}
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Soft delete by setting is_active to false
         response = supabase.table("habits").update({
@@ -332,7 +333,7 @@ async def log_habit(
         return HabitLog(**new_log)
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Call the log_habit RPC
         response = supabase.rpc("log_habit", {
@@ -345,6 +346,46 @@ async def log_habit(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to log habit: {str(e)}"
+        )
+
+
+@router.delete("/{habit_id}/log")
+async def delete_habit_log(
+    habit_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    log_date: Optional[date] = Query(None, description="Date of the log to delete (defaults to today)")
+):
+    """Delete a habit log for a specific day (defaults to today)."""
+    user_id = current_user["id"]
+    target_date = log_date or date.today()
+
+    if settings.TEST_MODE:
+        # Find matching logs and remove
+        to_delete = [key for key, log in test_logs.items()
+                     if log["habit_id"] == habit_id
+                     and log["user_id"] == user_id
+                     and log["log_date"] == target_date]
+
+        if not to_delete:
+            return {"success": False, "message": "No log found"}
+
+        for key in to_delete:
+            test_logs.pop(key, None)
+
+        return {"success": True, "message": "Log removed"}
+
+    try:
+        supabase = get_user_supabase_client(current_user)
+
+        response = supabase.table("habit_logs").delete().eq("habit_id", habit_id)
+        response = response.eq("user_id", user_id).eq("log_date", target_date.isoformat()).execute()
+
+        deleted = bool(response.data)
+        return {"success": deleted, "message": "Log removed" if deleted else "No log found"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete habit log: {str(e)}"
         )
 
 @router.get("/{habit_id}/logs", response_model=List[HabitLog])
@@ -375,7 +416,7 @@ async def get_habit_logs(
         return [HabitLog(**l) for l in logs]
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         query = supabase.table("habit_logs").select("*").eq("habit_id", habit_id).eq("user_id", user_id)
         
@@ -399,43 +440,105 @@ async def get_insights(
 ):
     """Get insights and statistics"""
     user_id = current_user["id"]
-    
-    if settings.TEST_MODE:
-        # Calculate test insights
-        user_habits = [h for h in test_habits.values() if h["user_id"] == user_id and h["is_active"]]
-        
-        current_streaks = {}
-        year_comb = {}
-        total_logs = 0
-        total_possible = 0
-        
-        for habit in user_habits:
-            habit_logs = [l for l in test_logs.values() if l["habit_id"] == habit["id"]]
-            current_streaks[habit["name"]] = calculate_streak(habit_logs)
-            
-            # Year comb data (simplified)
-            year_comb[habit["name"]] = len(habit_logs)
-            
-            total_logs += len(habit_logs)
-            total_possible += days
-        
-        overall_completion = (total_logs / total_possible * 100) if total_possible > 0 else 0
-        
+
+    def build_response(habits: List[Dict[str, Any]], logs: List[Dict[str, Any]]) -> InsightsResponse:
+        today = date.today()
+        window_start = today - timedelta(days=days - 1)
+        year_start = today - timedelta(days=365)
+
+        habit_map = {habit["id"]: habit for habit in habits if habit.get("is_active", True)}
+        active_habits = len(habit_map)
+
+        logs_by_date: Dict[date, List[Dict[str, Any]]] = {}
+        logs_by_habit: Dict[str, List[Dict[str, Any]]] = {hid: [] for hid in habit_map.keys()}
+
+        for log in logs:
+            log_date = log["log_date"]
+            if isinstance(log_date, str):
+                log_date = date.fromisoformat(log_date)
+
+            if log["habit_id"] not in habit_map:
+                continue
+
+            logs_by_date.setdefault(log_date, []).append(log)
+            logs_by_habit.setdefault(log["habit_id"], []).append({
+                "log_date": log_date,
+                "value": log.get("value", 1)
+            })
+
+        completed_today = len(logs_by_date.get(today, []))
+
+        weekly_progress: List[int] = []
+        for offset in range(6, -1, -1):
+            day = today - timedelta(days=offset)
+            weekly_progress.append(len(logs_by_date.get(day, [])))
+
+        total_possible = active_habits * days
+        completed_in_window = sum(
+            1 for log in logs
+            if log["habit_id"] in habit_map and isinstance(log["log_date"], str) and date.fromisoformat(log["log_date"]) >= window_start
+        )
+        overall_completion = (completed_in_window / total_possible * 100) if total_possible > 0 else 0
+
+        streaks: List[HabitStreakSummary] = []
+        best_perf: Optional[HabitPerformance] = None
+        best_rate = -1.0
+
+        for habit_id, habit in habit_map.items():
+            habit_logs = logs_by_habit.get(habit_id, [])
+            streak = calculate_streak(habit_logs, target_date=today)
+            streaks.append(
+                HabitStreakSummary(
+                    habit_id=uuid.UUID(habit_id),
+                    name=habit.get("name", ""),
+                    emoji=habit.get("emoji"),
+                    streak=streak
+                )
+            )
+
+            # Completion rate for recent window
+            recent_count = sum(
+                1 for log in habit_logs
+                if isinstance(log["log_date"], date) and log["log_date"] >= window_start
+            )
+            rate = (recent_count / days) * 100 if days > 0 else 0
+            if rate > best_rate:
+                best_rate = rate
+                best_perf = HabitPerformance(
+                    habit_id=uuid.UUID(habit_id),
+                    name=habit.get("name", ""),
+                    emoji=habit.get("emoji"),
+                    completion_rate=rate
+                )
+
+        year_comb: Dict[str, int] = {}
+        for log_date, entries in logs_by_date.items():
+            if log_date >= year_start:
+                year_comb[log_date.isoformat()] = len(entries)
+
+        streaks.sort(key=lambda item: item.streak, reverse=True)
+
         return InsightsResponse(
             overall_completion=overall_completion,
-            active_habits=len(user_habits),
-            current_streaks=current_streaks,
-            year_comb=year_comb
+            active_habits=active_habits,
+            completed_today=completed_today,
+            weekly_progress=weekly_progress,
+            current_streaks=streaks,
+            year_comb=year_comb,
+            best_performing=best_perf
         )
-    
+
+    if settings.TEST_MODE:
+        user_habits = [h for h in test_habits.values() if h["user_id"] == user_id and h.get("is_active", True)]
+        user_logs = [l for l in test_logs.values() if l["user_id"] == user_id]
+        return build_response(user_habits, user_logs)
+
     try:
-        # Implementation for production would query Supabase
-        return InsightsResponse(
-            overall_completion=0.0,
-            active_habits=0,
-            current_streaks={},
-            year_comb={}
-        )
+        supabase = get_user_supabase_client(current_user)
+        habits_response = supabase.table("habits").select("*").eq("user_id", user_id).eq("is_active", True).execute()
+        logs_response = supabase.table("habit_logs").select("habit_id, log_date, value").eq("user_id", user_id).execute()
+
+        return build_response(habits_response.data or [], logs_response.data or [])
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

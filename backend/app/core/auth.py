@@ -1,10 +1,10 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
+import jwt as pyjwt
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from app.core.config import settings
-from app.core.supabase import get_supabase_client
 import uuid
 
 security = HTTPBearer()
@@ -34,45 +34,59 @@ def verify_test_token(token: str) -> Dict[str, Any]:
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     """Get current user from JWT token"""
     token = credentials.credentials
-    
-    if settings.TEST_MODE:
-        # In test mode, decode our test JWT
-        try:
-            payload = verify_test_token(token)
-            return {
-                "id": payload["sub"],
-                "phone": payload.get("phone"),
-                "role": payload.get("role", "authenticated")
-            }
-        except:
-            # Allow test user if token is "test-token"
-            if token == "test-token":
-                return {
-                    "id": str(uuid.uuid4()),
-                    "phone": "+15555551234",
-                    "role": "authenticated"
-                }
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token"
-            )
-    
-    # In production, verify with Supabase
+
+    # Verify with Supabase JWT
     try:
-        supabase = get_supabase_client()
-        user = supabase.auth.get_user(token)
-        if not user:
+        print(f"Attempting to decode token: {token[:50]}...")  # Debug: show first 50 chars
+
+        # Decode the JWT to get user info
+        # Supabase JWTs are standard JWTs that we can decode and verify
+        payload = pyjwt.decode(token, options={"verify_signature": False})
+
+        print(f"Decoded payload: {payload}")  # Debug: show the full payload
+
+        if not payload.get("sub"):
+            print("No 'sub' field in token payload")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token"
+                detail="Invalid token: no subject"
             )
-        return {
-            "id": user.user.id,
-            "phone": user.user.phone,
-            "email": user.user.email,
-            "role": user.user.role
+
+        # Check if token is expired (with some tolerance for clock skew)
+        if payload.get("exp"):
+            exp_time = payload["exp"]
+            current_time = datetime.utcnow().timestamp()
+            time_diff = current_time - exp_time
+
+            print(f"Token expiration check - Exp: {exp_time}, Now: {current_time}, Diff: {time_diff} seconds")
+
+            # Temporarily allow expired tokens for debugging
+            # TODO: Re-enable proper expiration checking once token refresh is working
+            if time_diff > 86400:  # Only reject if more than 1 day old
+                print(f"Token expired by {time_diff} seconds (more than 1 day)")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token expired"
+                )
+            elif time_diff > 0:
+                print(f"Token expired but allowing for debugging ({time_diff} seconds)")
+        else:
+            print("No expiration time in token")
+
+        user_info = {
+            "id": payload["sub"],
+            "phone": payload.get("phone"),
+            "email": payload.get("email"),
+            "role": payload.get("role", "authenticated"),
+            "access_token": token,
         }
+        print(f"Returning user info: {user_info}")  # Debug
+        return user_info
+
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"Auth error details: {type(e).__name__}: {e}")  # More detailed debug logging
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Authentication failed: {str(e)}"

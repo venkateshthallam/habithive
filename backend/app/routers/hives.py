@@ -5,7 +5,7 @@ from app.models.schemas import (
     HiveInvite, HiveInviteCreate, JoinHiveRequest
 )
 from app.core.auth import get_current_user
-from app.core.supabase import get_supabase_client
+from app.core.supabase import get_user_supabase_client
 from app.core.config import settings
 from typing import Dict, Any, List, Optional
 from datetime import datetime, date, timedelta
@@ -62,7 +62,7 @@ async def get_hives(
         return hives
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Get hives where user is a member
         member_response = supabase.table("hive_members").select("hive_id").eq("user_id", user_id).execute()
@@ -114,7 +114,7 @@ async def create_hive(
         return Hive(**new_hive)
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Create hive
         hive_data = {
@@ -136,6 +136,62 @@ async def create_hive(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create hive: {str(e)}"
+        )
+
+
+@router.delete("/{hive_id}")
+async def delete_hive(
+    hive_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Delete a hive (owner only)."""
+    user_id = current_user["id"]
+
+    if settings.TEST_MODE:
+        if hive_id not in test_hives:
+            raise HTTPException(status_code=404, detail="Hive not found")
+
+        hive = test_hives[hive_id]
+        if hive["owner_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Only the owner can delete the hive")
+
+        # Remove hive and related data
+        test_hives.pop(hive_id, None)
+        to_delete_members = [key for key, member in test_hive_members.items() if member["hive_id"] == hive_id]
+        for key in to_delete_members:
+            test_hive_members.pop(key, None)
+
+        to_delete_days = [key for key, day in test_hive_member_days.items() if day["hive_id"] == hive_id]
+        for key in to_delete_days:
+            test_hive_member_days.pop(key, None)
+
+        to_delete_invites = [key for key, invite in test_hive_invites.items() if invite["hive_id"] == hive_id]
+        for key in to_delete_invites:
+            test_hive_invites.pop(key, None)
+
+        return {"success": True, "message": "Hive deleted"}
+
+    try:
+        supabase = get_user_supabase_client(current_user)
+
+        hive_response = supabase.table("hives").select("owner_id").eq("id", hive_id).single().execute()
+        hive_data = hive_response.data
+
+        if not hive_data:
+            raise HTTPException(status_code=404, detail="Hive not found")
+
+        if hive_data["owner_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Only the owner can delete the hive")
+
+        supabase.table("hives").delete().eq("id", hive_id).execute()
+
+        return {"success": True, "message": "Hive deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete hive: {str(e)}"
         )
 
 @router.post("/from-habit", response_model=Hive)
@@ -208,7 +264,7 @@ async def create_hive_from_habit(
         return Hive(**new_hive)
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Call the create_hive_from_habit RPC
         response = supabase.rpc("create_hive_from_habit", {
@@ -292,7 +348,7 @@ async def get_hive_detail(
         )
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Get hive
         hive_response = supabase.table("hives").select("*").eq("id", hive_id).single().execute()
@@ -381,7 +437,7 @@ async def create_hive_invite(
         return HiveInvite(**new_invite)
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Call create_hive_invite RPC
         response = supabase.rpc("create_hive_invite", {
@@ -448,7 +504,7 @@ async def join_hive(
         return {"success": True, "hive_id": hive_id, "message": "Successfully joined hive"}
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Call join_hive_with_code RPC
         response = supabase.rpc("join_hive_with_code", {
@@ -510,7 +566,7 @@ async def log_hive_day(
         return HiveMemberDay(**new_day)
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Call log_hive_today RPC
         response = supabase.rpc("log_hive_today", {
@@ -579,7 +635,7 @@ async def advance_hive_day(
         }
     
     try:
-        supabase = get_supabase_client()
+        supabase = get_user_supabase_client(current_user)
         
         # Call advance_hive_day RPC
         response = supabase.rpc("advance_hive_day", {

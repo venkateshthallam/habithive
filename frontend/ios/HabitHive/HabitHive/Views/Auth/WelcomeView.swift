@@ -1,161 +1,167 @@
 import SwiftUI
+import AuthenticationServices
 
 struct WelcomeView: View {
-    @State private var showAuth = false
-    @State private var animateBlobs = false
     @StateObject private var themeManager = ThemeManager.shared
-    
+    @State private var isProcessing = false
+    @State private var errorMessage: String?
+    @State private var currentNonce: String?
+
     var body: some View {
-        NavigationStack {
-            ZStack {
-                // Background gradient
-                themeManager.currentTheme.primaryGradient
-                    .ignoresSafeArea()
-                
-                // Floating blobs animation
-                FloatingBlobsView()
-                    .opacity(0.3)
-                
-                VStack(spacing: HiveSpacing.xl) {
-                    Spacer()
-                    
-                    // Logo
+        ZStack {
+            themeManager.currentTheme.primaryGradient
+                .ignoresSafeArea()
+
+            VStack(spacing: HiveSpacing.xl) {
+                Spacer()
+
+                // App Logo and Title
+                VStack(spacing: HiveSpacing.md) {
                     ZStack {
                         Circle()
-                            .fill(Color.white.opacity(0.9))
-                            .frame(width: 120, height: 120)
-                            .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                        
-                        Image(systemName: "hexagon.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(HiveColors.honeyGradientEnd)
+                            .fill(Color.white.opacity(0.18))
+                            .frame(width: 130, height: 130)
                             .overlay(
-                                Text("🐝")
-                                    .font(.system(size: 40))
+                                Circle()
+                                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
                             )
+                            .shadow(color: .black.opacity(0.15), radius: 18, x: 0, y: 10)
+
+                        Text("🐝")
+                            .font(.system(size: 64))
                     }
-                    .scaleEffect(animateBlobs ? 1.05 : 1.0)
-                    .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: animateBlobs)
-                    
-                    VStack(spacing: HiveSpacing.md) {
-                        Text("Welcome to")
-                            .font(HiveTypography.title2)
-                            .foregroundColor(.white.opacity(0.9))
-                        
+
+                    VStack(spacing: HiveSpacing.xs) {
                         Text("HabitHive")
                             .font(HiveTypography.largeTitle)
+                            .fontWeight(.heavy)
                             .foregroundColor(.white)
-                            .fontWeight(.bold)
-                    }
-                    
-                    Text("Build better habits with your personal\nbee colony. Track, grow, and thrive\ntogether!")
-                        .font(HiveTypography.body)
-                        .foregroundColor(.white.opacity(0.9))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, HiveSpacing.lg)
-                    
-                    Spacer()
-                    
-                    // Get Started Button
-                    Button(action: { showAuth = true }) {
-                        HStack {
-                            Text("Get Started")
-                                .font(HiveTypography.headline)
-                                .foregroundColor(.white)
-                            
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, HiveSpacing.md)
-                        .background(
-                            Capsule()
-                                .fill(Color.white.opacity(0.2))
-                                .background(
-                                    Capsule()
-                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                )
-                        )
+                        Text("Pour honey on better habits with your hive")
+                            .font(HiveTypography.body)
+                            .foregroundColor(.white.opacity(0.85))
+                            .multilineTextAlignment(.center)
                     }
                     .padding(.horizontal, HiveSpacing.lg)
-                    .padding(.bottom, HiveSpacing.xl)
+                }
+
+                Spacer()
+
+                // Auth Options
+                VStack(spacing: HiveSpacing.lg) {
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(HiveTypography.caption)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, HiveSpacing.lg)
+                            .transition(.opacity)
+                    }
+
+                    VStack(spacing: HiveSpacing.md) {
+                        // Apple Sign In Button
+                        SignInWithAppleButton(.signIn) { request in
+                            request.requestedScopes = [.fullName, .email]
+                            let nonce = randomNonceString()
+                            currentNonce = nonce
+                            request.nonce = sha256(nonce)
+                        } onCompletion: { result in
+                            handleAppleSignIn(result)
+                        }
+                        .signInWithAppleButtonStyle(.white)
+                        .frame(height: 50)
+                        .cornerRadius(HiveRadius.xlarge)
+                        .disabled(isProcessing)
+                    }
+                }
+                .padding(.horizontal, HiveSpacing.lg)
+                .padding(.bottom, HiveSpacing.xl)
+            }
+        }
+    }
+
+    private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        Task {
+            errorMessage = nil
+            isProcessing = true
+
+            do {
+                switch result {
+                case .success(let authorization):
+                    guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                          let identityToken = appleIDCredential.identityToken,
+                          let idTokenString = String(data: identityToken, encoding: .utf8) else {
+                        throw AppleSignInError.invalidCredentials
+                    }
+
+                    // Use the real Apple ID token to create/authenticate user
+                    try await FastAPIClient.shared.signInWithApple(idToken: idTokenString, nonce: currentNonce)
+
+                case .failure(let error):
+                    throw error
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
                 }
             }
-            .navigationDestination(isPresented: $showAuth) { OnboardingFlowView() }
-        }
-        .onAppear {
-            animateBlobs = true
-        }
-    }
-}
 
-// MARK: - Floating Blobs Animation
-struct FloatingBlobsView: View {
-    @State private var animate = false
-    
-    var body: some View {
-        GeometryReader { geometry in
-            ForEach(0..<6) { index in
-                BlobShape()
-                    .fill(Color.white.opacity(0.1))
-                    .frame(width: CGFloat.random(in: 60...120),
-                           height: CGFloat.random(in: 60...120))
-                    .position(
-                        x: CGFloat.random(in: 0...geometry.size.width),
-                        y: CGFloat.random(in: 0...geometry.size.height)
-                    )
-                    .offset(
-                        x: animate ? CGFloat.random(in: -30...30) : 0,
-                        y: animate ? CGFloat.random(in: -30...30) : 0
-                    )
-                    .animation(
-                        .easeInOut(duration: Double.random(in: 3...6))
-                        .repeatForever(autoreverses: true)
-                        .delay(Double(index) * 0.2),
-                        value: animate
-                    )
+            await MainActor.run {
+                isProcessing = false
             }
         }
-        .onAppear {
-            animate = true
+    }
+
+    private func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        var result = ""
+        var remainingLength = length
+
+        while remainingLength > 0 {
+            let randoms: [UInt8] = (0..<16).map { _ in
+                var random: UInt8 = 0
+                let errorCode = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
+                if errorCode != errSecSuccess {
+                    fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+                }
+                return random
+            }
+
+            randoms.forEach { random in
+                if remainingLength == 0 {
+                    return
+                }
+
+                if random < charset.count {
+                    result.append(charset[Int(random)])
+                    remainingLength -= 1
+                }
+            }
+        }
+
+        return result
+    }
+
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        let hashString = hashedData.compactMap {
+            String(format: "%02x", $0)
+        }.joined()
+
+        return hashString
+    }
+}
+
+import CryptoKit
+
+enum AppleSignInError: LocalizedError {
+    case invalidCredentials
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidCredentials:
+            return "Failed to get valid credentials from Apple"
         }
     }
-}
-
-struct BlobShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath()
-        let width = rect.width
-        let height = rect.height
-        
-        path.move(to: CGPoint(x: 0.5 * width, y: 0))
-        path.addCurve(
-            to: CGPoint(x: width, y: 0.5 * height),
-            controlPoint1: CGPoint(x: 0.9 * width, y: 0),
-            controlPoint2: CGPoint(x: width, y: 0.1 * height)
-        )
-        path.addCurve(
-            to: CGPoint(x: 0.5 * width, y: height),
-            controlPoint1: CGPoint(x: width, y: 0.9 * height),
-            controlPoint2: CGPoint(x: 0.9 * width, y: height)
-        )
-        path.addCurve(
-            to: CGPoint(x: 0, y: 0.5 * height),
-            controlPoint1: CGPoint(x: 0.1 * width, y: height),
-            controlPoint2: CGPoint(x: 0, y: 0.9 * height)
-        )
-        path.addCurve(
-            to: CGPoint(x: 0.5 * width, y: 0),
-            controlPoint1: CGPoint(x: 0, y: 0.1 * height),
-            controlPoint2: CGPoint(x: 0.1 * width, y: 0)
-        )
-        
-        return Path(path.cgPath)
-    }
-}
-
-
-#Preview {
-    WelcomeView()
 }

@@ -1,6 +1,6 @@
 from supabase import create_client, Client
 from app.core.config import settings
-from typing import Optional
+from typing import Optional, Dict, Any
 
 def get_supabase_client(access_token: Optional[str] = None) -> Client:
     """Get Supabase client with optional user access token"""
@@ -28,3 +28,9 @@ def get_supabase_admin() -> Client:
             settings.SUPABASE_SERVICE_KEY or "test-service-key"
         )
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+
+
+def get_user_supabase_client(current_user: Dict[str, Any]) -> Client:
+    """Create a Supabase client scoped to the authenticated user's access token."""
+    access_token = current_user.get("access_token") if current_user else None
+    return get_supabase_client(access_token=access_token)
