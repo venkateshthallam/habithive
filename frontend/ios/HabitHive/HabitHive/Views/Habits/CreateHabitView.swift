@@ -225,7 +225,7 @@ struct CreateHabitView: View {
             if !viewModel.scheduleDaily {
                 // Week day selector
                 HStack {
-                    ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { day in
+                    ForEach(Array(["M", "T", "W", "T", "F", "S", "S"].enumerated()), id: \.offset) { index, day in
                         Text(day)
                             .font(HiveTypography.caption)
                             .frame(width: 35, height: 35)

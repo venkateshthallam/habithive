@@ -69,6 +69,8 @@ struct WelcomeView: View {
                         }
                         .signInWithAppleButtonStyle(.white)
                         .frame(height: 50)
+                        .frame(maxWidth: 375)
+                        .frame(maxWidth: .infinity)
                         .cornerRadius(HiveRadius.xlarge)
                         .disabled(isProcessing)
                     }

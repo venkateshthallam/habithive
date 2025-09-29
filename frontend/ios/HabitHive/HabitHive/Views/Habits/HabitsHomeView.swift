@@ -188,6 +188,7 @@ struct HabitsHomeView: View {
     private func handleBeeButtonTap(_ habit: Habit) {
         let todayLog = viewModel.todayLog(for: habit.id)
         if let log = todayLog {
+            // Remove existing log
             let removed = viewModel.optimisticToggle(habit: habit, value: log.value, adding: false)
             if removed {
 #if canImport(UIKit)
@@ -196,16 +197,16 @@ struct HabitsHomeView: View {
                 viewModel.deleteHabitLog(habitId: habit.id, logDateString: log.logDate)
             }
         } else {
+            // Add new log
             let value = habit.type == .counter ? habit.targetPerDay : 1
-            let added = viewModel.optimisticToggle(habit: habit, value: value, adding: true)
-            if added {
 #if canImport(UIKit)
-                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
 #endif
-                viewModel.logHabit(habitId: habit.id, value: value)
-                honeyPourHabitId = habit.id
-                showHoneyPour = true
-            }
+            // Always perform optimistic update and API call
+            viewModel.optimisticToggle(habit: habit, value: value, adding: true)
+            viewModel.logHabit(habitId: habit.id, value: value)
+            honeyPourHabitId = habit.id
+            showHoneyPour = true
         }
     }
 
@@ -224,11 +225,16 @@ struct HabitCardView: View {
     let onLongPress: () -> Void
 
     private var todayString: String {
-        DateFormatter.hiveDayFormatter.string(from: Date())
+        let today = DateFormatter.hiveDayFormatter.string(from: Date())
+        print("🔵 iOS todayString: \(today), actual Date(): \(Date())")
+        return today
     }
 
     private var todaysLog: HabitLog? {
-        habit.recentLogs?.first(where: { $0.logDate == todayString })
+        let today = todayString
+        let log = habit.recentLogs?.first(where: { $0.logDate == today })
+        print("🔴 Checking for today's log: today=\(today), found=\(log != nil), habitLogs=\(habit.recentLogs?.map { $0.logDate } ?? [])")
+        return log
     }
 
     private var isCompletedToday: Bool {
@@ -659,16 +665,30 @@ class HabitsViewModel: ObservableObject {
         var habitCopy = habits[idx]
         var logs = habitCopy.recentLogs ?? []
         let today = DateFormatter.hiveDayFormatter.string(from: Date())
+        print("🔵 Optimistic toggle - today: \(today), Date(): \(Date())")
 
         if let existingIndex = logs.firstIndex(where: { $0.logDate == today }) {
             if adding {
-                // Already logged; do nothing
-                return false
+                // Update existing log with new value
+                logs[existingIndex] = HabitLog(
+                    id: logs[existingIndex].id,
+                    habitId: habitCopy.id,
+                    userId: habitCopy.userId,
+                    logDate: today,
+                    value: value,
+                    source: "manual",
+                    createdAt: logs[existingIndex].createdAt
+                )
+                habitCopy.recentLogs = logs
+                habits[idx] = habitCopy
+                return true
+            } else {
+                // Remove existing log
+                logs.remove(at: existingIndex)
+                habitCopy.recentLogs = logs
+                habits[idx] = habitCopy
+                return true
             }
-            logs.remove(at: existingIndex)
-            habitCopy.recentLogs = logs
-            habits[idx] = habitCopy
-            return true
         } else {
             guard adding else { return false }
             let newLog = HabitLog(
@@ -713,6 +733,13 @@ class HabitsViewModel: ObservableObject {
 
         do {
             let habits = try await apiClient.getHabits(includeLogs: true, days: 30)
+            print("🔵 Received \(habits.count) habits from API")
+            habits.forEach { habit in
+                print("🔵 Habit: \(habit.name) with \(habit.recentLogs?.count ?? 0) logs")
+                habit.recentLogs?.forEach { log in
+                    print("🔵 UI Log: date=\(log.logDate), value=\(log.value)")
+                }
+            }
             self.habits = habits
         } catch {
             self.errorMessage = error.localizedDescription

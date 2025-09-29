@@ -60,6 +60,9 @@ struct HabitDetailView: View {
             viewModel.configure(with: habit)
             viewModel.loadHabitDetails(habitId: habit.id)
         }
+        .refreshable {
+            viewModel.loadHabitDetails(habitId: habit.id)
+        }
         .onReceive(viewModel.$habit.compactMap { $0 }) { updated in
             currentHabit = updated
         }
@@ -307,10 +310,11 @@ struct MonthCalendarView: View {
     private let weekDays = ["S", "M", "T", "W", "T", "F", "S"]
     
     var body: some View {
+        let days = getDaysInMonth()
         VStack(spacing: HiveSpacing.xs) {
             // Week day headers
             HStack(spacing: HiveSpacing.xs) {
-                ForEach(weekDays, id: \.self) { day in
+                ForEach(Array(weekDays.enumerated()), id: \.offset) { _, day in
                     Text(day)
                         .font(HiveTypography.caption2)
                         .foregroundColor(HiveColors.slateText.opacity(0.5))
@@ -320,7 +324,7 @@ struct MonthCalendarView: View {
             
             // Calendar grid
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: HiveSpacing.xs), count: 7), spacing: HiveSpacing.xs) {
-                ForEach(getDaysInMonth(), id: \.self) { date in
+                ForEach(Array(days.enumerated()), id: \.offset) { _, date in
                     if let date = date {
                         DayCell(
                             date: date,
@@ -474,18 +478,21 @@ class HabitDetailViewModel: ObservableObject {
 
     private func fetchLogs(habitId: String) async throws -> [HabitLog] {
         let startDate = Calendar.current.date(byAdding: .month, value: -12, to: Date())
-        return try await apiClient.getHabitLogs(habitId: habitId, startDate: startDate, endDate: Date())
+        return try await apiClient.getHabitLogs(habitId: habitId, startDate: startDate, endDate: nil)
     }
 
     private func calculateStats(for habit: Habit) {
         let today = DateFormatter.hiveDayFormatter.string(from: Date())
+        print("🔍 Detail view calculateStats - today: \(today), logs: \(logs.map { $0.logDate })")
         if let todayLog = logs.first(where: { $0.logDate == today }) {
             todayValue = todayLog.value
             let threshold = habit.type == .counter ? habit.targetPerDay : 1
             isCompletedToday = todayLog.value >= max(threshold, 1)
+            print("🔍 Detail view - found today's log, isCompleted: \(isCompletedToday)")
         } else {
             todayValue = 0
             isCompletedToday = false
+            print("🔍 Detail view - no log found for today, isCompleted: false")
         }
 
         totalDays = Set(logs.map { $0.logDate }).count

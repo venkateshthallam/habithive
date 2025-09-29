@@ -72,6 +72,7 @@ final class FastAPIClient: ObservableObject {
 
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private let dayFormatter: DateFormatter
     private let sessionStorageKey = "fastapi.session"
     private let refreshTokenStorageKey = "fastapi.refreshToken"
     private let phoneStorageKey = "fastapi.phone"
@@ -101,6 +102,10 @@ final class FastAPIClient: ObservableObject {
     nonisolated private init() {
         decoder = JSONDecoder()
         encoder = JSONEncoder()
+        dayFormatter = DateFormatter()
+        dayFormatter.calendar = Calendar(identifier: .gregorian)
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.dateFormat = "yyyy-MM-dd"
 
         // Set up date formatting for your FastAPI backend
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -327,6 +332,28 @@ final class FastAPIClient: ObservableObject {
         )
 
         return response.map { habitResponse in
+            print("🟡 Processing habit response: \(habitResponse.name) with \(habitResponse.recent_logs?.count ?? 0) logs")
+
+            let recentLogs: [HabitLog] = habitResponse.recent_logs?.map { logResponse in
+                let logDateString = dayFormatter.string(from: logResponse.log_date)
+                print("🟡 Converting log: date=\(logResponse.log_date) -> dateString=\(logDateString), value=\(logResponse.value)")
+
+                return HabitLog(
+                    id: logResponse.id.uuidString,
+                    habitId: logResponse.habit_id.uuidString,
+                    userId: logResponse.user_id.uuidString,
+                    logDate: logDateString,
+                    value: logResponse.value,
+                    source: logResponse.source,
+                    createdAt: logResponse.created_at
+                )
+            } ?? []
+
+            print("🟡 Final habit logs count: \(recentLogs.count)")
+            recentLogs.forEach { log in
+                print("🟡 Final log: id=\(log.id), date=\(log.logDate), value=\(log.value)")
+            }
+
             var habitModel = Habit(
                 id: habitResponse.id.uuidString,
                 userId: habitResponse.user_id.uuidString,
@@ -340,17 +367,7 @@ final class FastAPIClient: ObservableObject {
                 isActive: habitResponse.is_active,
                 createdAt: habitResponse.created_at,
                 updatedAt: habitResponse.updated_at,
-                recentLogs: habitResponse.recent_logs?.map { logResponse in
-                    HabitLog(
-                        id: logResponse.id.uuidString,
-                        habitId: logResponse.habit_id.uuidString,
-                        userId: logResponse.user_id.uuidString,
-                        logDate: ISO8601DateFormatter().string(from: logResponse.log_date),
-                        value: logResponse.value,
-                        source: logResponse.source,
-                        createdAt: logResponse.created_at
-                    )
-                } ?? []
+                recentLogs: recentLogs
             )
 
             habitModel.currentStreak = habitResponse.current_streak
@@ -400,7 +417,7 @@ final class FastAPIClient: ObservableObject {
             id: logResponse.id.uuidString,
             habitId: logResponse.habit_id.uuidString,
             userId: logResponse.user_id.uuidString,
-            logDate: ISO8601DateFormatter().string(from: logResponse.log_date),
+            logDate: dayFormatter.string(from: logResponse.log_date),
             value: logResponse.value,
             source: logResponse.source,
             createdAt: logResponse.created_at
@@ -412,7 +429,7 @@ final class FastAPIClient: ObservableObject {
 
         var path = "/api/habits/\(habitId)/log"
         if let logDate = logDate {
-            let dateString = ISO8601DateFormatter().string(from: logDate)
+            let dateString = dayFormatter.string(from: logDate)
             path += "?log_date=\(dateString)"
         }
 
@@ -465,7 +482,7 @@ final class FastAPIClient: ObservableObject {
                     id: logResponse.id.uuidString,
                     habitId: logResponse.habit_id.uuidString,
                     userId: logResponse.user_id.uuidString,
-                    logDate: ISO8601DateFormatter().string(from: logResponse.log_date),
+                    logDate: dayFormatter.string(from: logResponse.log_date),
                     value: logResponse.value,
                     source: logResponse.source,
                     createdAt: logResponse.created_at
@@ -481,12 +498,12 @@ final class FastAPIClient: ObservableObject {
         var queryItems: [String] = []
 
         if let startDate = startDate {
-            let dateString = ISO8601DateFormatter().string(from: startDate)
+            let dateString = dayFormatter.string(from: startDate)
             queryItems.append("start_date=\(dateString)")
         }
 
         if let endDate = endDate {
-            let dateString = ISO8601DateFormatter().string(from: endDate)
+            let dateString = dayFormatter.string(from: endDate)
             queryItems.append("end_date=\(dateString)")
         }
 
@@ -505,7 +522,7 @@ final class FastAPIClient: ObservableObject {
                 id: logResponse.id.uuidString,
                 habitId: logResponse.habit_id.uuidString,
                 userId: logResponse.user_id.uuidString,
-                logDate: ISO8601DateFormatter().string(from: logResponse.log_date),
+                logDate: dayFormatter.string(from: logResponse.log_date),
                 value: logResponse.value,
                 source: logResponse.source,
                 createdAt: logResponse.created_at

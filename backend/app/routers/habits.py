@@ -103,11 +103,13 @@ async def get_habits(
         
         result = []
         for habit in habits:
+            print(f"Processing habit: {habit['id']} - {habit['name']}")
             habit_with_logs = HabitWithLogs(**habit)
-            
+
             if include_logs:
                 # Get recent logs
                 start_date = (date.today() - timedelta(days=days)).isoformat()
+                print(f"Looking for logs since: {start_date}")
                 logs_response = (
                     supabase
                     .table("habit_logs")
@@ -120,16 +122,27 @@ async def get_habits(
                 )
 
                 if getattr(logs_response, "error", None):
+                    print(f"Error fetching logs: {logs_response.error}")
                     raise Exception(logs_response.error.get("message", "Unable to fetch logs"))
-                
+
                 logs = logs_response.data or []
-                habit_with_logs.recent_logs = [HabitLog(**l) for l in logs]
+                print(f"Found {len(logs)} logs for habit {habit['id']}: {logs}")
+
+                # Convert to HabitLog objects and log the conversion
+                habit_logs = []
+                for l in logs:
+                    habit_log = HabitLog(**l)
+                    print(f"Converted log: {l} -> HabitLog(log_date={habit_log.log_date})")
+                    habit_logs.append(habit_log)
+
+                habit_with_logs.recent_logs = habit_logs
                 habit_with_logs.current_streak = calculate_streak(logs)
-                
+
                 # Calculate completion rate
                 completed_days = len(set(l["log_date"] for l in logs))
                 habit_with_logs.completion_rate = (completed_days / days) * 100 if days > 0 else 0
-            
+                print(f"Habit {habit['id']} final logs count: {len(habit_with_logs.recent_logs or [])}")
+
             result.append(habit_with_logs)
         
         return result
@@ -245,6 +258,7 @@ async def get_habit(
                 raise Exception(logs_response.error.get("message", "Unable to fetch logs"))
             
             logs = logs_response.data or []
+            print(f"🔍 GET habit {habit_id} logs: {logs}")
             habit_with_logs.recent_logs = [HabitLog(**l) for l in logs]
             habit_with_logs.current_streak = calculate_streak(logs)
         
@@ -383,14 +397,52 @@ async def log_habit(
     
     try:
         supabase = get_user_supabase_client(current_user)
-        
-        # Call the log_habit RPC
-        response = supabase.rpc("log_habit", {
-            "p_habit_id": habit_id,
-            "p_value": log_data.value
-        }).execute()
-        
-        return HabitLog(**response.data)
+
+        print(f"📝 Logging habit {habit_id} for user {user_id} with value {log_data.value}")
+        # Use a fixed current UTC timestamp since server clock seems to be behind
+        import time
+        actual_utc_now = datetime.utcfromtimestamp(time.time())
+
+        print(f"📝 Today's date (server): {date.today()}")
+        print(f"📝 UTC now (datetime.utcnow): {datetime.utcnow()}")
+        print(f"📝 UTC now (from time.time): {actual_utc_now}")
+
+        current_utc = actual_utc_now.isoformat() + "Z"
+        print(f"📝 Sending timestamp: {current_utc}")
+
+        # Bypass the RPC and directly insert/update the log with correct date
+        today_date = actual_utc_now.date().isoformat()
+        print(f"📝 Using date: {today_date}")
+
+        # Try to insert or update the habit log directly
+        response = supabase.table("habit_logs").upsert({
+            "habit_id": habit_id,
+            "user_id": user_id,
+            "log_date": today_date,
+            "value": log_data.value,
+            "source": "api",
+            "notes": None
+        }, on_conflict="habit_id,log_date").execute()
+
+        print(f"📝 RPC response: {response}")
+        print(f"📝 RPC data: {response.data}")
+        print(f"📝 RPC error: {getattr(response, 'error', None)}")
+
+        if getattr(response, "error", None):
+            print(f"📝 Database error details: {response.error}")
+            raise Exception(f"Database error: {response.error}")
+
+        db_result = response.data
+        if isinstance(db_result, list):
+            if not db_result:
+                raise HTTPException(status_code=500, detail="Habit log insert returned no data")
+            db_result = db_result[0]
+
+        if db_result is None:
+            raise HTTPException(status_code=500, detail="Habit log insert returned empty payload")
+
+        print(f"📝 Final result: {db_result}")
+        return HabitLog(**db_result)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -441,8 +493,8 @@ async def delete_habit_log(
 async def get_habit_logs(
     habit_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
 ):
     """Get logs for a habit"""
     user_id = current_user["id"]
@@ -466,13 +518,24 @@ async def get_habit_logs(
     
     try:
         supabase = get_user_supabase_client(current_user)
-        
+
         query = supabase.table("habit_logs").select("*").eq("habit_id", habit_id).eq("user_id", user_id)
-        
+
         if start_date:
-            query = query.gte("log_date", start_date.isoformat())
+            # Parse ISO datetime string to date-only format for database comparison
+            try:
+                parsed_date = datetime.fromisoformat(start_date.replace('Z', '+00:00')).date()
+                query = query.gte("log_date", parsed_date.isoformat())
+            except ValueError:
+                # If parsing fails, assume it's already in the right format
+                query = query.gte("log_date", start_date)
+
         if end_date:
-            query = query.lte("log_date", end_date.isoformat())
+            try:
+                parsed_date = datetime.fromisoformat(end_date.replace('Z', '+00:00')).date()
+                query = query.lte("log_date", parsed_date.isoformat())
+            except ValueError:
+                query = query.lte("log_date", end_date)
         
         response = query.execute()
         return [HabitLog(**l) for l in response.data]
