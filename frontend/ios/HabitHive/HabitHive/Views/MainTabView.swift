@@ -581,18 +581,18 @@ class HivesViewModel: ObservableObject {
     @Published var bestPerformer: HabitPerformanceSummary?
 
     private let apiClient = FastAPIClient.shared
+    private var lastLoadedAt: Date?
+    private let freshnessInterval: TimeInterval = 120
 
     func loadHives() {
-        Task {
-            await loadHivesAsync()
-        }
+        Task { await loadHivesAsync(force: false) }
     }
 
     func joinHive(code: String) {
         Task {
             do {
                 try await apiClient.joinHive(code: code)
-                await loadHivesAsync()
+                await loadHivesAsync(force: true)
             } catch {
                 await MainActor.run { self.errorMessage = error.localizedDescription }
             }
@@ -600,18 +600,26 @@ class HivesViewModel: ObservableObject {
     }
 
     func refreshHives() async {
-        await loadHivesAsync()
+        await loadHivesAsync(force: true)
     }
 
     @MainActor
-    private func loadHivesAsync() async {
+    private func loadHivesAsync(force: Bool) async {
+        if !force,
+           let lastLoadedAt,
+           Date().timeIntervalSince(lastLoadedAt) < freshnessInterval,
+           !hives.isEmpty {
+            return
+        }
+
         isLoading = true
 
         do {
-            let hives = try await fetchHives()
-            self.hives = hives
-            let leaders = await fetchLeaderboard(for: hives)
-            self.leaderboard = leaders
+            let overview = try await apiClient.getHives()
+            self.hives = overview.hives
+            self.leaderboard = overview.leaderboard
+            lastLoadedAt = Date()
+            errorMessage = ""
 
             if let summary = try? await apiClient.getInsightsSummary() {
                 applyInsights(summary)
@@ -620,59 +628,10 @@ class HivesViewModel: ObservableObject {
             self.errorMessage = error.localizedDescription
             self.hives = []
             self.leaderboard = []
+            lastLoadedAt = nil
         }
 
         isLoading = false
-    }
-
-    private func fetchHives() async throws -> [Hive] {
-        try await apiClient.getHives()
-    }
-
-    private func fetchLeaderboard(for hives: [Hive]) async -> [HiveLeaderboardEntry] {
-        guard !hives.isEmpty else { return [] }
-
-        var accumulator: [String: HiveLeaderboardEntry] = [:]
-
-        for hive in hives {
-            do {
-                let detail = try await fetchHiveDetail(hiveId: hive.id)
-                let membersDone = Set(detail.members.filter { $0.status == .completed }.map { $0.userId })
-
-                for member in detail.members {
-                    var entry = accumulator[member.userId] ?? HiveLeaderboardEntry(
-                        id: member.userId,
-                        displayName: member.displayName ?? "Bee",
-                        avatarURL: member.avatarUrl,
-                        completedToday: 0,
-                        totalHives: 0
-                    )
-
-                    entry.totalHives += 1
-                    if membersDone.contains(member.userId) {
-                        entry.completedToday += 1
-                    }
-
-                    accumulator[member.userId] = entry
-                }
-            } catch {
-                continue
-            }
-        }
-
-        return accumulator.values
-            .sorted { lhs, rhs in
-                if lhs.completedToday == rhs.completedToday {
-                    return lhs.displayName < rhs.displayName
-                }
-                return lhs.completedToday > rhs.completedToday
-            }
-            .prefix(5)
-            .map { $0 }
-    }
-
-    private func fetchHiveDetail(hiveId: String) async throws -> HiveDetail {
-        try await apiClient.getHiveDetail(hiveId: hiveId)
     }
 
     @MainActor
@@ -686,33 +645,6 @@ class HivesViewModel: ObservableObject {
     }
 }
 
-struct HiveLeaderboardEntry: Identifiable {
-    let id: String
-    let displayName: String
-    let avatarURL: String?
-    var completedToday: Int
-    var totalHives: Int
-
-    var completionPercentage: Int {
-        guard totalHives > 0 else { return 0 }
-        return Int(round((Double(completedToday) / Double(totalHives)) * 100))
-    }
-
-    var initials: String {
-        let components = displayName.split(separator: " ")
-        if let first = components.first {
-            return String(first.prefix(1)).uppercased()
-        }
-        return String(displayName.prefix(1)).uppercased()
-    }
-
-    var avatarColor: Color {
-        let colors = HiveColors.habitColors
-        let index = abs(id.hashValue) % max(colors.count, 1)
-        return colors[index]
-    }
-}
-
 // MARK: - Insights View
 
 struct InsightsView: View {
@@ -720,9 +652,15 @@ struct InsightsView: View {
     @StateObject private var viewModel = InsightsViewModel()
 
     var body: some View {
-        NavigationView {
-            insightsContent
-                .navigationBarTitle("Insights", displayMode: .inline)
+        NavigationStack {
+            ZStack {
+                themeManager.currentTheme.backgroundColor
+                    .ignoresSafeArea()
+
+                insightsContent
+            }
+            .navigationTitle("Insights")
+            .navigationBarTitleDisplayMode(.inline)
         }
         .onAppear {
             viewModel.loadInsights()
@@ -731,68 +669,260 @@ struct InsightsView: View {
 
     @ViewBuilder
     private var insightsContent: some View {
-        ZStack {
-            themeManager.currentTheme.backgroundColor
-                .ignoresSafeArea()
-
-            if viewModel.isLoading {
-                VStack(spacing: HiveSpacing.lg) {
-                    ProgressView()
-                    Text("Loading insights...")
-                        .font(HiveTypography.body)
-                        .foregroundColor(HiveColors.beeBlack.opacity(0.7))
-                }
-            } else {
-                ScrollView {
-                    VStack(spacing: HiveSpacing.lg) {
-                        SummaryCard(overallCompletion: viewModel.overallCompletion, completedToday: viewModel.completedToday, theme: themeManager.currentTheme)
-                        WeeklyProgressCard(weeklyProgress: viewModel.weeklyProgress, theme: themeManager.currentTheme)
-                        StreaksCard(currentStreaks: viewModel.currentStreaks, theme: themeManager.currentTheme)
-                        YearOverviewCard(yearData: viewModel.yearComb, theme: themeManager.currentTheme)
-                        BestHabitCard(bestPerformer: viewModel.bestPerformer, theme: themeManager.currentTheme)
-                    }
-                    .padding(.horizontal, HiveSpacing.lg)
-                    .padding(.bottom, HiveSpacing.xl)
-                    .padding(.top, HiveSpacing.lg)
-                }
-                .refreshable {
-                    await viewModel.refreshInsights()
-                }
+        if viewModel.isLoading {
+            VStack(spacing: HiveSpacing.lg) {
+                ProgressView()
+                Text("Loading insights…")
+                    .font(HiveTypography.body)
+                    .foregroundColor(themeManager.currentTheme.secondaryTextColor)
             }
+        } else if let _ = viewModel.dashboard {
+            ScrollView {
+                VStack(alignment: .leading, spacing: HiveSpacing.lg) {
+                    rangePicker
+                    statsCards
+                    yearOverviewCard
+                    habitPerformanceCard
+                }
+                .padding(.horizontal, HiveSpacing.lg)
+                .padding(.bottom, HiveSpacing.xl)
+                .padding(.top, HiveSpacing.lg)
+            }
+            .refreshable {
+                await viewModel.refreshInsights()
+            }
+        } else if !viewModel.errorMessage.isEmpty {
+            VStack(spacing: HiveSpacing.md) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(HiveColors.error)
+                Text(viewModel.errorMessage)
+                    .font(HiveTypography.body)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                Button("Retry") {
+                    viewModel.loadInsights()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(HiveColors.honeyGradientEnd)
+            }
+            .padding()
+        } else {
+            Text("No insights yet – start logging habits to see your progress.")
+                .font(HiveTypography.body)
+                .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                .multilineTextAlignment(.center)
+                .padding()
         }
     }
 
+    private var rangePicker: some View {
+        Picker("Range", selection: $viewModel.selectedRange) {
+            ForEach(InsightRange.allCases, id: \.self) { range in
+                Text(range.displayName).tag(range)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private var statsCards: some View {
+        let average = viewModel.currentStats?.averageCompletion ?? 0
+        let streak = viewModel.currentStats?.currentStreak ?? 0
+        let averageText = String(format: "%.0f%%", average)
+
+        return HStack(spacing: HiveSpacing.lg) {
+            InsightStatCard(
+                title: "\(viewModel.selectedRange.displayName) Average",
+                value: averageText,
+                subtitle: "Completion",
+                gradient: LinearGradient(
+                    colors: [HiveColors.honeyGradientStart, HiveColors.honeyGradientEnd],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+
+            InsightStatCard(
+                title: "Current Streak",
+                value: "\(streak)",
+                subtitle: "Best habit",
+                gradient: LinearGradient(
+                    colors: [Color(hex: "#FF6F61"), Color(hex: "#FF9472")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+    }
+
+    private var yearOverviewCard: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            HStack {
+                Text("Year Overview")
+                    .font(HiveTypography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                Spacer()
+                Label("All Habits", systemImage: "chevron.down")
+                    .font(HiveTypography.caption)
+                    .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+            }
+
+            YearHeatmapView(data: viewModel.yearOverview, theme: themeManager.currentTheme)
+        }
+        .padding(HiveSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(themeManager.currentTheme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(themeManager.currentTheme == .night ? 0.4 : 0.08), radius: 12, x: 0, y: 8)
+        )
+    }
+
+    private var habitPerformanceCard: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("Habit Performance")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(themeManager.currentTheme.primaryTextColor)
+
+            VStack(spacing: HiveSpacing.sm) {
+                if let performance = viewModel.currentStats?.habitPerformance, !performance.isEmpty {
+                    ForEach(performance) { item in
+                        HabitPerformanceRow(item: item, theme: themeManager.currentTheme)
+                            .padding(.vertical, HiveSpacing.xs)
+                            .padding(.horizontal, HiveSpacing.sm)
+                            .background(
+                                RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                    .fill(themeManager.currentTheme == .night ? Color.white.opacity(0.08) : Color.white)
+                            )
+                    }
+                } else {
+                    Text("No data yet for this range.")
+                        .font(HiveTypography.caption)
+                        .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(HiveSpacing.sm)
+                        .background(
+                            RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                .fill(themeManager.currentTheme == .night ? Color.white.opacity(0.08) : Color.white)
+                        )
+                }
+            }
+        }
+        .padding(HiveSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(themeManager.currentTheme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(themeManager.currentTheme == .night ? 0.4 : 0.08), radius: 12, x: 0, y: 8)
+        )
+    }
+}
+
+private struct InsightStatCard: View {
+    let title: String
+    let value: String
+    let subtitle: String
+    let gradient: LinearGradient
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+            Text(title)
+                .font(HiveTypography.caption)
+                .foregroundColor(.white.opacity(0.8))
+
+            Text(value)
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+
+            Text(subtitle)
+                .font(HiveTypography.caption)
+                .foregroundColor(.white.opacity(0.8))
+        }
+        .padding(HiveSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            gradient
+                .cornerRadius(HiveRadius.large)
+        )
+        .shadow(color: HiveColors.honeyGradientEnd.opacity(0.25), radius: 10, x: 0, y: 6)
+    }
+}
+
+private struct HabitPerformanceRow: View {
+    let item: HabitPerformanceDetailModel
+    let theme: AppTheme
+
+    var body: some View {
+        HStack(spacing: HiveSpacing.md) {
+            Text(item.emoji ?? "🐝")
+                .font(.system(size: 28))
+                .frame(width: 44, height: 44)
+                .background(
+                    Circle()
+                        .fill(item.color.opacity(theme == .night ? 0.3 : 0.18))
+                )
+
+            VStack(alignment: .leading, spacing: HiveSpacing.xs) {
+                Text(item.name)
+                    .font(HiveTypography.headline)
+                    .foregroundColor(theme.primaryTextColor)
+
+                Text("Target \(item.targetPerDay) · \(item.type == .counter ? "Counter" : "Checkbox")")
+                    .font(HiveTypography.caption)
+                    .foregroundColor(theme.secondaryTextColor)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(String(format: "%.0f%%", item.completionRate))
+                    .font(HiveTypography.headline)
+                    .foregroundColor(item.color)
+
+                Text("\(item.streak) streak")
+                    .font(HiveTypography.caption)
+                    .foregroundColor(theme.secondaryTextColor)
+            }
+        }
+    }
 }
 
 
 class InsightsViewModel: ObservableObject {
-    @Published var overallCompletion: Double = 0
-    @Published var activeHabits: Int = 0
-    @Published var completedToday: Int = 0
-    @Published var weeklyProgress: [Int] = Array(repeating: 0, count: 7)
-    @Published var currentStreaks: [HabitStreakDisplay] = []
-    @Published var yearComb: [String: Int] = [:]
-    @Published var bestPerformer: HabitPerformanceSummary?
+    @Published var dashboard: InsightsDashboard?
+    @Published var selectedRange: InsightRange = .week
     @Published var isLoading = false
     @Published var errorMessage = ""
 
     private let apiClient = FastAPIClient.shared
+    private var lastLoadedAt: Date?
+    private let freshnessInterval: TimeInterval = 120
 
     func loadInsights() {
-        Task { await loadInsightsAsync() }
+        Task { await loadInsightsAsync(force: false) }
     }
 
     func refreshInsights() async {
-        await loadInsightsAsync()
+        await loadInsightsAsync(force: true)
     }
 
     @MainActor
-    private func loadInsightsAsync() async {
+    private func loadInsightsAsync(force: Bool) async {
+        if !force,
+           let lastLoadedAt,
+           Date().timeIntervalSince(lastLoadedAt) < freshnessInterval,
+           dashboard != nil {
+            return
+        }
+
         isLoading = true
 
         do {
-            let summary = try await apiClient.getInsightsSummary()
-            apply(summary)
+            let dashboard = try await apiClient.getInsightsDashboard()
+            self.dashboard = dashboard
+            lastLoadedAt = Date()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -800,14 +930,13 @@ class InsightsViewModel: ObservableObject {
         isLoading = false
     }
 
-    private func apply(_ summary: InsightsSummary) {
-        overallCompletion = summary.overallCompletion
-        activeHabits = summary.activeHabits
-        completedToday = summary.completedToday
-        weeklyProgress = summary.weeklyProgress
-        currentStreaks = summary.currentStreaks
-        yearComb = summary.yearComb
-        bestPerformer = summary.bestPerforming
+    var currentStats: InsightsRangeStatsModel? {
+        guard let dashboard else { return nil }
+        return dashboard.stats(for: selectedRange)
+    }
+
+    var yearOverview: [String: Int] {
+        dashboard?.yearOverview ?? [:]
     }
 }
 

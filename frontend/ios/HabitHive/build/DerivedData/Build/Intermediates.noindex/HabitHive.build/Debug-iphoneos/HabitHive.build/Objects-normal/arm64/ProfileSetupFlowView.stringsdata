@@ -1,0 +1,128 @@
+{
+  "source": "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/Views/Onboarding/ProfileSetupFlowView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Step %lld of %lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 83
+        }
+      },
+      {
+        "comment": "",
+        "key": "Finish",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 98
+        }
+      },
+      {
+        "comment": "",
+        "key": "Continue",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 98
+        }
+      },
+      {
+        "comment": "",
+        "key": "What should we call you?",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 218
+        }
+      },
+      {
+        "comment": "",
+        "key": "Bee Wonder",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 222
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add your phone number",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 244
+        }
+      },
+      {
+        "comment": "",
+        "key": "(555) 123-4567",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 247
+        }
+      },
+      {
+        "comment": "",
+        "key": "Upload contacts to find your hive",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 272
+        }
+      },
+      {
+        "comment": "",
+        "key": "We'll only store salted hashes—never the raw numbers.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 301
+        }
+      },
+      {
+        "comment": "",
+        "key": "Contacts Added",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 286
+        }
+      },
+      {
+        "comment": "",
+        "key": "Upload Contacts",
+        "location": {
+          "startingColumn": 68,
+          "startingLine": 286
+        }
+      },
+      {
+        "comment": "",
+        "key": "Get reminders to stay on track",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 317
+        }
+      },
+      {
+        "comment": "",
+        "key": "We'll send gentle reminders to help you stay consistent.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 346
+        }
+      },
+      {
+        "comment": "",
+        "key": "Notifications Enabled",
+        "location": {
+          "startingColumn": 53,
+          "startingLine": 331
+        }
+      },
+      {
+        "comment": "",
+        "key": "Enable Notifications",
+        "location": {
+          "startingColumn": 79,
+          "startingLine": 331
+        }
+      }
+    ]
+  },
+  "version": 1
+}

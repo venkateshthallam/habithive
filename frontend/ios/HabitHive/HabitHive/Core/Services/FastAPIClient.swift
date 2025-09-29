@@ -402,10 +402,20 @@ final class FastAPIClient: ObservableObject {
         )
     }
 
-    func logHabit(habitId: String, value: Int) async throws -> HabitLog {
+    func logHabit(habitId: String, value: Int, on date: Date? = nil) async throws -> HabitLog {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
 
-        let logRequest = HabitLogCreateRequest(value: value)
+        let timestamp: Date
+        if let date {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone.current
+            timestamp = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: date) ?? date
+        } else {
+            timestamp = Date()
+        }
+
+        let logDateString = date.map { dayFormatter.string(from: $0) }
+        let logRequest = HabitLogCreateRequest(value: value, clientTimestamp: timestamp, logDate: logDateString)
         let logResponse: HabitLogResponse = try await performRequest(
             path: "/api/habits/\(habitId)/log",
             method: .post,
@@ -532,12 +542,16 @@ final class FastAPIClient: ObservableObject {
 
     // MARK: - Hives
 
-    func getHives() async throws -> [Hive] {
+    func getHives() async throws -> HiveOverview {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
-        return try await performRequest(
+        let response: HiveOverviewResponseDTO = try await performRequest(
             path: "/api/hives/",
             method: .get,
             requiresAuth: true
+        )
+        return HiveOverview(
+            hives: response.hives.map { $0.toDomain() },
+            leaderboard: response.leaderboard.map { $0.toDomain() }
         )
     }
 
@@ -677,6 +691,15 @@ final class FastAPIClient: ObservableObject {
                     completionRate: perf.completion_rate
                 )
             }
+        )
+    }
+
+    func getInsightsDashboard() async throws -> InsightsDashboard {
+        guard isAuthenticated else { throw FastAPIError.unauthorized }
+        return try await performRequest(
+            path: "/api/habits/insights/dashboard",
+            method: .get,
+            requiresAuth: true
         )
     }
 
@@ -1008,6 +1031,125 @@ private struct HabitLogResponse: Decodable {
 
 private struct HabitLogCreateRequest: Encodable {
     let value: Int
+    let clientTimestamp: Date
+    let logDate: String?
+
+    enum CodingKeys: String, CodingKey {
+        case value
+        case clientTimestamp = "client_timestamp"
+        case logDate = "log_date"
+    }
+}
+
+private struct HiveOverviewResponseDTO: Decodable {
+    let hives: [HiveSummaryResponse]
+    let leaderboard: [HiveLeaderboardResponse]
+}
+
+private struct HiveSummaryResponse: Decodable {
+    let id: UUID
+    let name: String
+    let description: String?
+    let ownerId: UUID
+    let emoji: String?
+    let colorHex: String
+    let type: HabitTypeResponse
+    let targetPerDay: Int
+    let rule: String
+    let threshold: Int?
+    let scheduleDaily: Bool
+    let scheduleWeekmask: Int
+    let isActive: Bool
+    let inviteCode: String?
+    let maxMembers: Int?
+    let currentLength: Int?
+    let currentStreak: Int?
+    let longestStreak: Int?
+    let lastAdvancedOn: Date?
+    let createdAt: Date
+    let updatedAt: Date?
+    let memberCount: Int?
+    let avgCompletion: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case description
+        case ownerId = "owner_id"
+        case emoji
+        case colorHex = "color_hex"
+        case type
+        case targetPerDay = "target_per_day"
+        case rule
+        case threshold
+        case scheduleDaily = "schedule_daily"
+        case scheduleWeekmask = "schedule_weekmask"
+        case isActive = "is_active"
+        case inviteCode = "invite_code"
+        case maxMembers = "max_members"
+        case currentLength = "current_length"
+        case currentStreak = "current_streak"
+        case longestStreak = "longest_streak"
+        case lastAdvancedOn = "last_advanced_on"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case memberCount = "member_count"
+        case avgCompletion = "avg_completion"
+    }
+
+    func toDomain() -> Hive {
+        Hive(
+            id: id.uuidString,
+            name: name,
+            description: description,
+            ownerId: ownerId.uuidString,
+            emoji: emoji,
+            colorHex: colorHex,
+            type: HabitType(rawValue: type.rawValue) ?? .checkbox,
+            targetPerDay: targetPerDay,
+            rule: rule,
+            threshold: threshold,
+            scheduleDaily: scheduleDaily,
+            scheduleWeekmask: scheduleWeekmask,
+            isActive: isActive,
+            inviteCode: inviteCode,
+            createdAt: createdAt,
+            updatedAt: updatedAt ?? createdAt,
+            memberCount: memberCount,
+            maxMembers: maxMembers,
+            currentLength: currentLength,
+            currentStreak: currentStreak,
+            longestStreak: longestStreak,
+            lastAdvancedOn: lastAdvancedOn.map { DateFormats.apiDay.string(from: $0) },
+            avgCompletion: avgCompletion
+        )
+    }
+}
+
+private struct HiveLeaderboardResponse: Decodable {
+    let userId: UUID
+    let displayName: String
+    let avatarUrl: String?
+    let completedToday: Int
+    let totalHives: Int
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case displayName = "display_name"
+        case avatarUrl = "avatar_url"
+        case completedToday = "completed_today"
+        case totalHives = "total_hives"
+    }
+
+    func toDomain() -> HiveLeaderboardEntry {
+        HiveLeaderboardEntry(
+            userId: userId.uuidString,
+            displayName: displayName,
+            avatarUrl: avatarUrl,
+            completedToday: completedToday,
+            totalHives: totalHives
+        )
+    }
 }
 
 // Insights Response Models

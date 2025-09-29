@@ -197,8 +197,10 @@ def test_insights():
     
     response = requests.get(f"{BASE_URL}/api/habits/insights/summary", headers=headers)
     print_response("Insights Summary", response)
-    
-    return response.status_code == 200
+    dashboard = requests.get(f"{BASE_URL}/api/habits/insights/dashboard", headers=headers)
+    print_response("Insights Dashboard", dashboard)
+
+    return response.status_code == 200 and dashboard.status_code == 200
 
 def main():
     print("\n" + "="*60)

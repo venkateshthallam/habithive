@@ -115,6 +115,8 @@ class HabitLogBase(BaseModel):
 
 class HabitLogCreate(BaseModel):
     value: int = Field(1, gt=0)
+    log_date: Optional[date] = None
+    client_timestamp: Optional[datetime] = Field(None, alias="client_timestamp")
 
 class HabitLog(HabitLogBase):
     id: UUID
@@ -249,6 +251,19 @@ class HiveMemberStatus(HiveMember):
     target_per_day: int = 1
 
 
+class HiveLeaderboardEntry(BaseModel):
+    user_id: UUID
+    display_name: str
+    avatar_url: Optional[str] = None
+    completed_today: int = 0
+    total_hives: int = 0
+
+
+class HiveOverviewResponse(BaseModel):
+    hives: List[Hive]
+    leaderboard: List[HiveLeaderboardEntry]
+
+
 class HiveDetail(Hive):
     avg_completion: float = 0.0
     today_summary: HiveTodaySummary = HiveTodaySummary()
@@ -269,6 +284,23 @@ class HabitPerformance(BaseModel):
     completion_rate: float
 
 
+class HabitPerformanceDetail(BaseModel):
+    habit_id: UUID
+    name: str
+    emoji: Optional[str] = None
+    color_hex: str
+    type: HabitType
+    target_per_day: int
+    completion_rate: float
+    streak: int
+
+
+class InsightsRangeStats(BaseModel):
+    average_completion: float
+    current_streak: int
+    habit_performance: List[HabitPerformanceDetail]
+
+
 class InsightsResponse(BaseModel):
     overall_completion: float
     active_habits: int
@@ -277,3 +309,8 @@ class InsightsResponse(BaseModel):
     current_streaks: List[HabitStreakSummary]
     year_comb: Dict[str, int]
     best_performing: Optional[HabitPerformance] = None
+
+
+class InsightsDashboardResponse(BaseModel):
+    ranges: Dict[str, InsightsRangeStats]
+    year_overview: Dict[str, int]

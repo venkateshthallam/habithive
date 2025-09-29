@@ -328,6 +328,49 @@ struct HiveInvite: Codable, Identifiable {
     }
 }
 
+struct HiveLeaderboardEntry: Codable, Identifiable {
+    let userId: String
+    let displayName: String
+    let avatarUrl: String?
+    let completedToday: Int
+    let totalHives: Int
+
+    var id: String { userId }
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case displayName = "display_name"
+        case avatarUrl = "avatar_url"
+        case completedToday = "completed_today"
+        case totalHives = "total_hives"
+    }
+
+    var completionPercentage: Int {
+        guard totalHives > 0 else { return 0 }
+        return Int(round((Double(completedToday) / Double(totalHives)) * 100))
+    }
+
+    var initials: String {
+        let components = displayName.split(separator: " ")
+        if let first = components.first {
+            return String(first.prefix(1)).uppercased()
+        }
+        return String(displayName.prefix(1)).uppercased()
+    }
+
+    var avatarColor: Color {
+        let colors = HiveColors.habitColors
+        guard !colors.isEmpty else { return HiveColors.honeyGradientEnd }
+        let index = abs(userId.hashValue) % colors.count
+        return colors[index]
+    }
+}
+
+struct HiveOverview: Codable {
+    let hives: [Hive]
+    let leaderboard: [HiveLeaderboardEntry]
+}
+
 // MARK: - Activity
 enum ActivityType: String, Codable {
     case habitCompleted = "habit_completed"
@@ -525,6 +568,70 @@ struct HabitPerformanceSummary: Codable {
         case name
         case emoji
         case completionRate = "completion_rate"
+    }
+}
+
+enum InsightRange: String, CaseIterable, Codable {
+    case week
+    case month
+    case year
+
+    var displayName: String {
+        switch self {
+        case .week: return "Week"
+        case .month: return "Month"
+        case .year: return "Year"
+        }
+    }
+}
+
+struct HabitPerformanceDetailModel: Codable, Identifiable {
+    let id: UUID
+    let name: String
+    let emoji: String?
+    let colorHex: String
+    let type: HabitType
+    let targetPerDay: Int
+    let completionRate: Double
+    let streak: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id = "habit_id"
+        case name
+        case emoji
+        case colorHex = "color_hex"
+        case type
+        case targetPerDay = "target_per_day"
+        case completionRate = "completion_rate"
+        case streak
+    }
+
+    var color: Color { Color(hex: colorHex) }
+}
+
+struct InsightsRangeStatsModel: Codable {
+    let averageCompletion: Double
+    let currentStreak: Int
+    let habitPerformance: [HabitPerformanceDetailModel]
+
+    enum CodingKeys: String, CodingKey {
+        case averageCompletion = "average_completion"
+        case currentStreak = "current_streak"
+        case habitPerformance = "habit_performance"
+    }
+}
+
+struct InsightsDashboard: Codable {
+    let ranges: [String: InsightsRangeStatsModel]
+    let yearOverview: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case ranges
+        case yearOverview = "year_overview"
+    }
+
+    func stats(for range: InsightRange) -> InsightsRangeStatsModel? {
+        ranges[range.rawValue]
     }
 }
 

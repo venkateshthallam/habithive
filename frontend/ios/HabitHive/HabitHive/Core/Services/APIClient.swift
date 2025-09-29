@@ -556,7 +556,7 @@ final class APIClient: ObservableObject {
 
     // MARK: - Hives
 
-    func getHives() async throws -> [Hive] {
+    func getHives() async throws -> HiveOverview {
         throw APIError.notImplemented
     }
 

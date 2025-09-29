@@ -1,0 +1,16 @@
+{
+  "source": "/Users/venkateshthallam/Documents/code/habithive/frontend/ios/HabitHive/HabitHive/HabitHiveApp.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Loading your hive…",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 31
+        }
+      }
+    ]
+  },
+  "version": 1
+}

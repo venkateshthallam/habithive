@@ -32,6 +32,7 @@ struct HabitsHomeView: View {
                                 ForEach(viewModel.habits) { habit in
                                     HabitCardView(
                                         habit: habit,
+                                        todayKey: viewModel.currentDayKey,
                                         theme: themeManager.currentTheme,
                                         onLog: {
                                             handleBeeButtonTap(habit)
@@ -219,21 +220,14 @@ struct HabitsHomeView: View {
 // MARK: - Habit Card View
 struct HabitCardView: View {
     let habit: Habit
+    let todayKey: String
     let theme: AppTheme
     let onLog: () -> Void
     let onOpen: () -> Void
     let onLongPress: () -> Void
 
-    private var todayString: String {
-        let today = DateFormatter.hiveDayFormatter.string(from: Date())
-        print("🔵 iOS todayString: \(today), actual Date(): \(Date())")
-        return today
-    }
-
     private var todaysLog: HabitLog? {
-        let today = todayString
-        let log = habit.recentLogs?.first(where: { $0.logDate == today })
-        print("🔴 Checking for today's log: today=\(today), found=\(log != nil), habitLogs=\(habit.recentLogs?.map { $0.logDate } ?? [])")
+        let log = habit.recentLogs?.first(where: { $0.logDate == todayKey })
         return log
     }
 
@@ -624,7 +618,7 @@ extension DateFormatter {
     static let hiveDayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.timeZone = TimeZone.current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
@@ -637,11 +631,14 @@ class HabitsViewModel: ObservableObject {
     @Published var errorMessage = ""
     
     private let apiClient = FastAPIClient.shared
+    private var lastLoadedAt: Date?
+    private let freshnessInterval: TimeInterval = 90
     
+    @MainActor
     var completedToday: Int {
-        habits.filter { habit in
+        let today = todayKey
+        return habits.filter { habit in
             if let logs = habit.recentLogs {
-                let today = DateFormatter.hiveDayFormatter.string(from: Date())
                 return logs.contains { $0.logDate == today }
             }
             return false
@@ -651,11 +648,15 @@ class HabitsViewModel: ObservableObject {
     var totalStreak: Int {
         habits.compactMap { $0.currentStreak }.max() ?? 0
     }
+
+    @MainActor
+    var currentDayKey: String { todayKey }
     
     func loadHabits() {
-        Task { await loadHabitsAsync() }
+        Task { await loadHabitsAsync(force: false) }
     }
 
+    @MainActor
     @discardableResult
     func optimisticToggle(habit: Habit, value: Int, adding: Bool) -> Bool {
         guard let idx = habits.firstIndex(where: { $0.id == habit.id }) else {
@@ -664,9 +665,7 @@ class HabitsViewModel: ObservableObject {
 
         var habitCopy = habits[idx]
         var logs = habitCopy.recentLogs ?? []
-        let today = DateFormatter.hiveDayFormatter.string(from: Date())
-        print("🔵 Optimistic toggle - today: \(today), Date(): \(Date())")
-
+        let today = todayKey
         if let existingIndex = logs.firstIndex(where: { $0.logDate == today }) {
             if adding {
                 // Update existing log with new value
@@ -707,14 +706,15 @@ class HabitsViewModel: ObservableObject {
         }
     }
 
+    @MainActor
     func todayLog(for habitId: String) -> HabitLog? {
         guard let habit = habits.first(where: { $0.id == habitId }) else { return nil }
-        let today = DateFormatter.hiveDayFormatter.string(from: Date())
+        let today = todayKey
         return habit.recentLogs?.first(where: { $0.logDate == today })
     }
     
     func refreshHabits() async {
-        await loadHabitsAsync()
+        await loadHabitsAsync(force: true)
     }
 
     func addHabitOptimistically(_ habit: Habit) {
@@ -723,29 +723,50 @@ class HabitsViewModel: ObservableObject {
 
         // Refresh the habits list to get the latest data from server
         Task {
-            await refreshHabits()
+            await loadHabitsAsync(force: true)
         }
     }
 
     @MainActor
-    private func loadHabitsAsync() async {
+    private func loadHabitsAsync(force: Bool) async {
+        if !force,
+           let lastLoadedAt,
+           Date().timeIntervalSince(lastLoadedAt) < freshnessInterval,
+           !habits.isEmpty {
+            return
+        }
+
         isLoading = true
 
         do {
             let habits = try await apiClient.getHabits(includeLogs: true, days: 30)
-            print("🔵 Received \(habits.count) habits from API")
-            habits.forEach { habit in
-                print("🔵 Habit: \(habit.name) with \(habit.recentLogs?.count ?? 0) logs")
-                habit.recentLogs?.forEach { log in
-                    print("🔵 UI Log: date=\(log.logDate), value=\(log.value)")
-                }
-            }
             self.habits = habits
+            lastLoadedAt = Date()
+            errorMessage = ""
         } catch {
             self.errorMessage = error.localizedDescription
+            lastLoadedAt = nil
         }
 
         isLoading = false
+    }
+
+    @MainActor
+    private var todayKey: String {
+        guard let user = apiClient.currentUser else {
+            return DateFormatter.hiveDayFormatter.string(from: Date())
+        }
+
+        let timezone = TimeZone(identifier: user.timezone) ?? .current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timezone
+
+        let adjusted = calendar.date(byAdding: .hour, value: -user.dayStartHour, to: Date()) ?? Date()
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = timezone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: adjusted)
     }
     
     func logHabit(habitId: String, value: Int) {

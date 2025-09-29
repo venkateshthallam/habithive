@@ -4,6 +4,7 @@ from app.models.schemas import (
     HiveMember, HiveMemberDay, LogHiveRequest,
     HiveInvite, HiveInviteCreate, JoinHiveRequest,
     HiveDetail, HiveMemberStatus, HiveTodaySummary,
+    HiveOverviewResponse, HiveLeaderboardEntry,
 )
 from app.core.auth import get_current_user
 from app.core.supabase import get_user_supabase_client
@@ -38,7 +39,7 @@ def generate_invite_code():
     """Generate a random invite code"""
     return secrets.token_hex(6)
 
-@router.get("/", response_model=List[Hive])
+@router.get("/", response_model=HiveOverviewResponse)
 async def get_hives(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
@@ -64,17 +65,26 @@ async def get_hives(
                 hive["member_count"] = member_count
                 hives.append(Hive(**hive))
 
-        return hives
+        return HiveOverviewResponse(hives=hives, leaderboard=[])
 
     try:
         supabase = get_user_supabase_client(current_user)
 
         # Get hives where user is a member
-        member_response = supabase.table("hive_members").select("hive_id").eq("user_id", user_id).eq("is_active", True).execute()
-        hive_ids = [m["hive_id"] for m in (member_response.data or [])]
+        member_response = (
+            supabase
+            .table("hive_members")
+            .select("hive_id,user_id,role")
+            .eq("user_id", user_id)
+            .eq("is_active", True)
+            .execute()
+        )
+
+        memberships = member_response.data or []
+        hive_ids = [m["hive_id"] for m in memberships]
 
         if not hive_ids:
-            return []
+            return HiveOverviewResponse(hives=[], leaderboard=[])
 
         # Get hive details
         hives_response = (
@@ -87,21 +97,130 @@ async def get_hives(
             .execute()
         )
 
-        hives: List[Hive] = []
-        for raw in hives_response.data or []:
-            member_count_resp = (
+        hive_rows = hives_response.data or []
+
+        # Gather member roster across these hives
+        members_response = (
+            supabase
+            .table("hive_members")
+            .select("hive_id,user_id,role")
+            .in_("hive_id", hive_ids)
+            .eq("is_active", True)
+            .execute()
+        )
+        member_rows = members_response.data or []
+
+        # Fetch display info for members
+        member_user_ids = list({row["user_id"] for row in member_rows})
+        profiles_lookup: Dict[str, Dict[str, Any]] = {}
+        if member_user_ids:
+            profiles_response = (
                 supabase
-                .table("hive_members")
-                .select("user_id", count='exact')
-                .eq("hive_id", raw["id"])  # type: ignore[index]
-                .eq("is_active", True)
+                .table("profiles")
+                .select("id, display_name, avatar_url")
+                .in_("id", member_user_ids)
                 .execute()
             )
-            member_count = getattr(member_count_resp, "count", None) or 0
+            profiles_lookup = {row["id"]: row for row in (profiles_response.data or [])}
+
+        # Resolve the user's local day once to use across all hives
+        user_day_response = supabase.rpc("user_local_date", {"p_user": str(user_id)}).execute()
+        if getattr(user_day_response, "error", None):
+            raise Exception(user_day_response.error.get("message", "Unable to resolve user day"))
+        user_day_iso = user_day_response.data
+
+        day_response = (
+            supabase
+            .table("hive_member_days")
+            .select("hive_id,user_id,value,done")
+            .in_("hive_id", hive_ids)
+            .eq("day_date", user_day_iso)
+            .execute()
+        )
+        day_rows = day_response.data or []
+
+        # Pre-group data for efficiency
+        members_by_hive: Dict[str, List[Dict[str, Any]]] = {}
+        for row in member_rows:
+            members_by_hive.setdefault(row["hive_id"], []).append(row)
+
+        day_by_hive: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        for row in day_rows:
+            hive_id = row["hive_id"]
+            user_key = row["user_id"]
+            day_by_hive.setdefault(hive_id, {})[user_key] = row
+
+        leaderboard_map: Dict[str, Dict[str, Any]] = {}
+        hives: List[Hive] = []
+
+        for raw in hive_rows:
+            hive_id = raw["id"]
+            target = raw.get("target_per_day") or 1
+
+            roster = members_by_hive.get(hive_id, [])
+            member_count = len(roster)
             raw["member_count"] = member_count
+
+            todays_entries = day_by_hive.get(hive_id, {})
+            completed = partial = 0
+            completion_total = 0.0
+
+            for member in roster:
+                user_key = member["user_id"]
+                day_entry = todays_entries.get(user_key)
+                raw_value = 0
+                if day_entry is not None:
+                    raw_value = int(day_entry.get("value", 0) or 0)
+
+                if raw_value >= target:
+                    completed += 1
+                elif raw_value > 0:
+                    partial += 1
+
+                if target > 0:
+                    completion_total += min(raw_value / target, 1.0)
+
+                board = leaderboard_map.setdefault(
+                    str(user_key),
+                    {
+                        "user_id": user_key,
+                        "completed_today": 0,
+                        "total_hives": 0,
+                    },
+                )
+                board["total_hives"] += 1
+                if raw_value >= target:
+                    board["completed_today"] += 1
+
+            if member_count:
+                raw["avg_completion"] = (completion_total / member_count) * 100
+            else:
+                raw["avg_completion"] = 0.0
+
+            raw.setdefault("current_streak", raw.get("current_length"))
+            raw.setdefault("longest_streak", raw.get("current_streak"))
+            raw.setdefault("updated_at", raw.get("updated_at", raw.get("created_at")))
+
             hives.append(Hive(**raw))
 
-        return hives
+        leaderboard: List[HiveLeaderboardEntry] = []
+        for stats in leaderboard_map.values():
+            user_key = str(stats["user_id"])
+            profile = profiles_lookup.get(user_key, {})
+            leaderboard.append(
+                HiveLeaderboardEntry(
+                    user_id=uuid.UUID(user_key),
+                    display_name=profile.get("display_name", "Bee"),
+                    avatar_url=profile.get("avatar_url"),
+                    completed_today=int(stats["completed_today"]),
+                    total_hives=int(stats["total_hives"]),
+                )
+            )
+
+        leaderboard.sort(key=lambda entry: (-entry.completed_today, entry.display_name.lower()))
+        leaderboard = leaderboard[:5]
+
+        return HiveOverviewResponse(hives=hives, leaderboard=leaderboard)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
