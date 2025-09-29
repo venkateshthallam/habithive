@@ -32,6 +32,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null default 'New Bee',
   avatar_url text,
+  phone text,
   timezone text not null default 'America/New_York',
   day_start_hour int not null default 4 check (day_start_hour between 0 and 23),
   theme text not null default 'honey',
@@ -47,6 +48,9 @@ create table if not exists public.profiles (
 );
 
 create index if not exists idx_profiles_created on public.profiles(created_at);
+create unique index if not exists idx_profiles_phone_unique
+  on public.profiles(phone)
+  where phone is not null;
 
 alter table public.profiles enable row level security;
 
@@ -178,6 +182,7 @@ create table if not exists public.hives (
   last_advanced_on date,
   is_active boolean not null default true,
   max_members int not null default 10 check (max_members between 2 and 10),
+  invite_code text not null default encode(gen_random_bytes(6), 'hex') unique,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

@@ -36,6 +36,7 @@ async def get_my_profile(current_user: Dict[str, Any] = Depends(get_current_user
             profile_data = {
                 "id": user_id,
                 "display_name": f"Bee {user_id[:6]}",
+                "phone": current_user.get("phone"),
                 "timezone": "America/New_York",
                 "day_start_hour": 4,
                 "theme": "honey"
@@ -52,6 +53,8 @@ async def get_my_profile(current_user: Dict[str, Any] = Depends(get_current_user
 
         # Profile exists, return it
         profile_data = response.data[0] if isinstance(response.data, list) else response.data
+        if profile_data.get("phone") is None and current_user.get("phone"):
+            profile_data["phone"] = current_user.get("phone")
         print(f"Returning existing profile: {profile_data}")
         return Profile(**profile_data)
 
@@ -74,7 +77,14 @@ async def update_my_profile(
         supabase = get_user_supabase_client(current_user)
         update_data = update.dict(exclude_unset=True)
         update_data["updated_at"] = datetime.utcnow().isoformat()
-        
+        if "phone" in update_data:
+            phone = update_data.get("phone")
+            if phone:
+                normalized = phone.strip()
+                update_data["phone"] = normalized
+            else:
+                update_data["phone"] = None
+
         response = supabase.table("profiles").update(update_data).eq("id", user_id).execute()
         
         if not response.data:

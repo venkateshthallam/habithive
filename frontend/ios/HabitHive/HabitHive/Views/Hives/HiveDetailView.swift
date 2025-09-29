@@ -23,8 +23,8 @@ struct HiveDetailView: View {
                 ScrollView {
                     VStack(spacing: HiveSpacing.lg) {
                         headerCard(for: hive)
+                        progressCard(for: hive)
                         membersCard(for: hive)
-                        sharedProgressCard(for: hive)
                         activityCard(for: hive)
 
                         if viewModel.isOwner {
@@ -35,12 +35,10 @@ struct HiveDetailView: View {
                     .padding(.bottom, HiveSpacing.xl)
                     .padding(.top, HiveSpacing.lg)
                 }
-                .refreshable {
-                    viewModel.load(hiveId: hiveId)
-                }
+                .refreshable { viewModel.load(hiveId: hiveId) }
             } else if viewModel.isLoading {
                 ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle())
+                    .progressViewStyle(.circular)
                     .tint(HiveColors.honeyGradientEnd)
             } else if let error = viewModel.errorMessage {
                 VStack(spacing: HiveSpacing.md) {
@@ -86,161 +84,152 @@ struct HiveDetailView: View {
         .onReceive(viewModel.$didDelete.filter { $0 }) { _ in
             dismiss()
         }
-        .onAppear {
-            viewModel.load(hiveId: hiveId)
-        }
+        .onAppear { viewModel.load(hiveId: hiveId) }
     }
 
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
             if let hive = viewModel.hive {
-                Button {
-                    viewModel.createInvite(hiveId: hive.id)
-                } label: {
+                Button { viewModel.createInvite(hiveId: hive.id) } label: {
                     Image(systemName: "person.crop.circle.badge.plus")
                 }
                 .accessibilityLabel("Invite members")
 
-                Button {
-                    viewModel.logToday(hiveId: hive.id)
-                } label: {
+                Button { viewModel.logToday(hiveId: hive.id) } label: {
                     Image(systemName: "drop.fill")
                 }
-                .disabled(viewModel.hasLoggedToday(hive))
-                .opacity(viewModel.hasLoggedToday(hive) ? 0.4 : 1)
+                .disabled(viewModel.hasCompletedToday(hive: hive))
+                .opacity(viewModel.hasCompletedToday(hive: hive) ? 0.4 : 1)
                 .accessibilityLabel("Log today")
             }
         }
     }
 
     private func headerCard(for hive: HiveDetail) -> some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.md) {
-            HStack(alignment: .top) {
+        let subtitle = hive.description?.isEmpty == false
+            ? hive.description!
+            : "\(hive.targetPerDay) per day goal"
+
+        return VStack(alignment: .leading, spacing: HiveSpacing.lg) {
+            VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+                Text(hive.emoji ?? "🐝")
+                    .font(.system(size: 44))
+
                 VStack(alignment: .leading, spacing: HiveSpacing.xs) {
                     Text(hive.name)
-                        .font(HiveTypography.title2)
-                        .fontWeight(.bold)
+                        .font(HiveTypography.largeTitle)
+                        .fontWeight(.heavy)
                         .foregroundColor(HiveColors.beeBlack)
 
-                    Text(hive.rule == "all_must_complete" ? "All members complete each day" : "Shared goal")
-                        .font(HiveTypography.caption)
-                        .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                    Text(subtitle)
+                        .font(HiveTypography.body)
+                        .foregroundColor(HiveColors.beeBlack.opacity(0.75))
                 }
-
-                Spacer()
-
-                Text("🐝")
-                    .font(.system(size: 32))
             }
 
-            HStack(spacing: HiveSpacing.sm) {
-                statPill(title: "Members", value: "\(hive.memberCount ?? hive.members.count)")
-                statPill(title: "Streak", value: "\(hive.currentLength) 🔥")
-                statPill(title: "Today", value: "\(hive.todayStatus.completeCount)/\(hive.todayStatus.requiredCount)")
+            HStack(spacing: HiveSpacing.md) {
+                summaryStat(title: "Members", value: "\(hive.memberCount ?? hive.members.count)")
+                summaryStat(title: "Group Streak", value: "\(hive.currentStreak ?? hive.currentLength ?? 0)")
+                summaryStat(title: "Avg Completion", value: "\(Int(hive.avgCompletion.rounded()))%")
             }
 
-            HStack(spacing: HiveSpacing.sm) {
+            if let inviteCode = hive.inviteCode, !inviteCode.isEmpty {
                 Button {
-                    viewModel.logToday(hiveId: hive.id)
+#if canImport(UIKit)
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    UIPasteboard.general.string = inviteCode
+#endif
+                    shareContent = ShareContent(text: "Join my HabitHive group! Use code: \(inviteCode)")
                 } label: {
-                    Text(viewModel.hasLoggedToday(hive) ? "Logged for Today" : "Log Today")
-                        .font(HiveTypography.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, HiveSpacing.sm)
-                        .background(
-                            RoundedRectangle(cornerRadius: HiveRadius.large)
-                                .fill(themeManager.currentTheme.primaryGradient)
-                                .opacity(viewModel.hasLoggedToday(hive) ? 0.5 : 1)
-                        )
-                }
-                .disabled(viewModel.hasLoggedToday(hive))
-
-                Button {
-                    viewModel.createInvite(hiveId: hive.id)
-                } label: {
-                    Text("Invite")
-                        .font(HiveTypography.headline)
-                        .foregroundColor(HiveColors.honeyGradientEnd)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, HiveSpacing.sm)
-                        .background(
-                            RoundedRectangle(cornerRadius: HiveRadius.large)
-                                .stroke(HiveColors.honeyGradientEnd, lineWidth: 1.5)
-                        )
+                    HStack(spacing: HiveSpacing.xs) {
+                        Image(systemName: "link")
+                        Text("Copy invite code • \(inviteCode.uppercased())")
+                    }
+                    .font(HiveTypography.caption)
+                    .foregroundColor(HiveColors.beeBlack)
+                    .padding(.horizontal, HiveSpacing.md)
+                    .padding(.vertical, HiveSpacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: HiveRadius.medium)
+                            .fill(Color.white.opacity(0.45))
+                    )
                 }
             }
         }
+        .padding(HiveSpacing.xl)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: [Color(hex: "#FFD166"), Color(hex: "#FF9F1C")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .cornerRadius(HiveRadius.large)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    private func progressCard(for hive: HiveDetail) -> some View {
+        let theme = themeManager.currentTheme
+        let summary = hive.todaySummary
+
+        return VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("Today's Hive Progress")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(theme.primaryTextColor)
+
+            HiveProgressBar(summary: summary)
+                .frame(height: 16)
+                .cornerRadius(8)
+
+            HStack(spacing: HiveSpacing.sm) {
+                progressLegend(color: HiveColors.mintSuccess, label: "Completed", value: summary.completed)
+                progressLegend(color: HiveColors.honeyGradientEnd, label: "In Progress", value: summary.partial)
+                progressLegend(color: HiveColors.lightGray, label: "Pending", value: summary.pending)
+            }
+        }
         .padding(HiveSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 10, x: 0, y: 6)
         )
     }
 
     private func membersCard(for hive: HiveDetail) -> some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+        let theme = themeManager.currentTheme
+        return VStack(alignment: .leading, spacing: HiveSpacing.md) {
             Text("Members")
                 .font(HiveTypography.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack)
+                .foregroundColor(theme.primaryTextColor)
 
             VStack(spacing: HiveSpacing.sm) {
                 ForEach(hive.members) { member in
-                    memberRow(member: member, done: hive.todayStatus.membersDone.contains(member.userId))
+                    memberRow(member: member)
                 }
             }
         }
         .padding(HiveSpacing.lg)
         .background(
             RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 6)
-        )
-    }
-
-    private func sharedProgressCard(for hive: HiveDetail) -> some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.md) {
-            Text("Shared Progress")
-                .font(HiveTypography.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack)
-
-            if hive.todayStatus.completeCount == hive.todayStatus.requiredCount {
-                Text("Everyone has poured honey for today.🍯")
-                    .font(HiveTypography.body)
-                    .foregroundColor(HiveColors.mintSuccess)
-            } else {
-                Text("Waiting on \(hive.todayStatus.requiredCount - hive.todayStatus.completeCount) bees")
-                    .font(HiveTypography.body)
-                    .foregroundColor(HiveColors.beeBlack)
-            }
-
-            // Placeholder for future comb heatmap
-            RoundedRectangle(cornerRadius: HiveRadius.medium)
-                .fill(HiveColors.lightGray)
-                .frame(height: 120)
-                .overlay(
-                    Text("Month comb coming soon")
-                        .font(HiveTypography.caption)
-                        .foregroundColor(HiveColors.beeBlack.opacity(0.6))
-                )
-        }
-        .padding(HiveSpacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 6)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 10, x: 0, y: 6)
         )
     }
 
     private func activityCard(for hive: HiveDetail) -> some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+        let theme = themeManager.currentTheme
+        return VStack(alignment: .leading, spacing: HiveSpacing.md) {
             Text("Activity")
                 .font(HiveTypography.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack)
+                .foregroundColor(theme.primaryTextColor)
 
             if hive.recentActivity.isEmpty {
                 VStack(spacing: HiveSpacing.sm) {
@@ -249,7 +238,7 @@ struct HiveDetailView: View {
 
                     Text("No recent activity yet")
                         .font(HiveTypography.body)
-                        .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                        .foregroundColor(theme.secondaryTextColor)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, HiveSpacing.lg)
@@ -264,11 +253,11 @@ struct HiveDetailView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(event.type.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
                                     .font(HiveTypography.body)
-                                    .foregroundColor(HiveColors.beeBlack)
+                                    .foregroundColor(theme.primaryTextColor)
 
                                 Text(event.createdAt.formatted(date: .abbreviated, time: .shortened))
                                     .font(HiveTypography.caption)
-                                    .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                                    .foregroundColor(theme.secondaryTextColor)
                             }
 
                             Spacer()
@@ -276,7 +265,8 @@ struct HiveDetailView: View {
                         .padding(HiveSpacing.md)
                         .background(
                             RoundedRectangle(cornerRadius: HiveRadius.medium)
-                                .fill(HiveColors.lightGray)
+                                .fill(theme.cardBackgroundColor.opacity(0.95))
+                                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.05), radius: 6, x: 0, y: 4)
                         )
                     }
                 }
@@ -285,105 +275,157 @@ struct HiveDetailView: View {
         .padding(HiveSpacing.lg)
         .background(
             RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 6)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 10, x: 0, y: 6)
         )
     }
 
     private var deleteCard: some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+        let theme = themeManager.currentTheme
+        return VStack(alignment: .leading, spacing: HiveSpacing.sm) {
             Text("Danger Zone")
                 .font(HiveTypography.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(HiveColors.error)
 
-            Text("Deleting the hive removes shared progress for everyone.")
-                .font(HiveTypography.body)
-                .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+            Text("Deleting the hive removes it for everyone. This cannot be undone.")
+                .font(HiveTypography.caption)
+                .foregroundColor(theme.secondaryTextColor)
 
-            Button(role: .destructive) {
+            Button {
                 showDeleteAlert = true
             } label: {
                 Text("Delete Hive")
-                    .font(HiveTypography.headline)
+                    .font(HiveTypography.body)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, HiveSpacing.md)
+                    .padding(.vertical, HiveSpacing.sm)
                     .background(
                         RoundedRectangle(cornerRadius: HiveRadius.large)
-                            .fill(HiveColors.error.opacity(0.1))
+                            .fill(HiveColors.error)
                     )
             }
         }
         .padding(HiveSpacing.lg)
         .background(
             RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 6)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 10, x: 0, y: 6)
         )
     }
 
-    private func statPill(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .font(HiveTypography.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack.opacity(0.55))
+    private func summaryStat(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.xs) {
             Text(value)
                 .font(HiveTypography.headline)
+                .fontWeight(.bold)
                 .foregroundColor(HiveColors.beeBlack)
+
+            Text(title)
+                .font(HiveTypography.caption)
+                .foregroundColor(HiveColors.beeBlack.opacity(0.7))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, HiveSpacing.sm)
-        .padding(.horizontal, HiveSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: HiveRadius.medium)
-                .fill(HiveColors.lightGray)
-        )
     }
 
-    private func memberRow(member: HiveMember, done: Bool) -> some View {
-        HStack(spacing: HiveSpacing.md) {
+    private func progressLegend(color: Color, label: String, value: Int) -> some View {
+        HStack(spacing: HiveSpacing.xs) {
             Circle()
-                .fill(done ? HiveColors.mintSuccess.opacity(0.3) : HiveColors.lightGray)
-                .frame(width: 44, height: 44)
-                .overlay(
-                    Text(memberInitial(for: member))
-                        .font(HiveTypography.headline)
-                        .foregroundColor(HiveColors.beeBlack)
-                )
+                .fill(color)
+                .frame(width: 10, height: 10)
 
-            VStack(alignment: .leading, spacing: 2) {
+            Text("\(value) \(label)")
+                .font(HiveTypography.caption)
+                .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func memberRow(member: HiveMemberStatus) -> some View {
+        let theme = themeManager.currentTheme
+        let isCurrentUser = member.userId == FastAPIClient.shared.currentUser?.id
+
+        let style: (String, Color) = {
+            switch member.status {
+            case .completed: return ("Completed today", HiveColors.mintSuccess)
+            case .partial: return ("In progress", HiveColors.honeyGradientEnd)
+            case .pending: return ("Pending", HiveColors.lightGray)
+            }
+        }()
+
+        return HStack(spacing: HiveSpacing.md) {
+            Circle()
+                .fill(style.1)
+                .frame(width: 12, height: 12)
+
+            VStack(alignment: .leading, spacing: 4) {
                 Text(member.displayName ?? "Bee")
                     .font(HiveTypography.body)
-                    .foregroundColor(HiveColors.beeBlack)
+                    .fontWeight(isCurrentUser ? .semibold : .regular)
+                    .foregroundColor(theme.primaryTextColor)
 
-                Text(member.role.capitalized)
+                Text(style.0)
                     .font(HiveTypography.caption)
-                    .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                    .foregroundColor(style.1)
             }
 
             Spacer()
 
-            if done {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 20))
-                    .foregroundColor(HiveColors.mintSuccess)
-            }
+            Text("\(member.value)/\(member.targetPerDay)")
+                .font(HiveTypography.caption)
+                .foregroundColor(theme.primaryTextColor)
+                .padding(.horizontal, HiveSpacing.sm)
+                .padding(.vertical, HiveSpacing.xs)
+                .background(
+                    Capsule()
+                        .fill(theme.cardBackgroundColor.opacity(0.85))
+                )
         }
-        .padding(HiveSpacing.md)
+        .padding(.vertical, HiveSpacing.sm)
+        .padding(.horizontal, HiveSpacing.md)
         .background(
             RoundedRectangle(cornerRadius: HiveRadius.medium)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
+                .fill(theme.backgroundColor.opacity(theme == .night ? 0.45 : 0.12))
         )
     }
+}
 
-    private func memberInitial(for member: HiveMember) -> String {
-        guard let displayName = member.displayName,
-              let firstCharacter = displayName.first else {
-            return "🐝"
+private struct HiveProgressBar: View {
+    let summary: HiveTodaySummary
+
+    private struct Segment: Identifiable {
+        let id = UUID()
+        let fraction: Double
+        let color: Color
+    }
+
+    private var segments: [Segment] {
+        var result: [Segment] = []
+        if summary.completedFraction > 0 {
+            result.append(Segment(fraction: summary.completedFraction, color: HiveColors.mintSuccess))
         }
-        return String(firstCharacter).uppercased()
+        if summary.partialFraction > 0 {
+            result.append(Segment(fraction: summary.partialFraction, color: HiveColors.honeyGradientEnd))
+        }
+        if summary.pendingFraction > 0 {
+            result.append(Segment(fraction: summary.pendingFraction, color: HiveColors.lightGray))
+        }
+        if result.isEmpty {
+            result.append(Segment(fraction: 1, color: HiveColors.lightGray.opacity(0.4)))
+        }
+        return result
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                ForEach(segments) { segment in
+                    segment.color
+                        .frame(width: geometry.size.width * segment.fraction)
+                }
+            }
+        }
     }
 }
 
@@ -400,7 +442,7 @@ private struct ActivityView: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
     }
 
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) { }
 }
 #endif
 
@@ -420,9 +462,9 @@ class HiveDetailViewModel: ObservableObject {
         return hive.ownerId == me
     }
 
-    func hasLoggedToday(_ hive: HiveDetail) -> Bool {
+    func hasCompletedToday(hive: HiveDetail) -> Bool {
         guard let me = api.currentUser?.id else { return false }
-        return hive.todayStatus.membersDone.contains(me)
+        return hive.members.first(where: { $0.userId == me })?.status == .completed
     }
 
     func load(hiveId: String) {
@@ -430,8 +472,7 @@ class HiveDetailViewModel: ObservableObject {
     }
 
     func logToday(hiveId: String) {
-        guard let currentHive = hive else { return }
-        if hasLoggedToday(currentHive) { return }
+        guard let hive = hive, !hasCompletedToday(hive: hive) else { return }
 
         Task {
             do {
@@ -439,9 +480,7 @@ class HiveDetailViewModel: ObservableObject {
 #if canImport(UIKit)
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
 #endif
-                await MainActor.run {
-                    self.logConfirmationMessage = "Honey poured for today!"
-                }
+                await MainActor.run { self.logConfirmationMessage = "Honey poured for today!" }
                 await loadHiveAsync(hiveId: hiveId)
             } catch {
                 await MainActor.run { self.errorMessage = error.localizedDescription }

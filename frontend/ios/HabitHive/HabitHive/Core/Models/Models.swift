@@ -110,7 +110,9 @@ struct HabitLog: Codable, Identifiable {
 struct Hive: Codable, Identifiable {
     let id: String
     let name: String
+    var description: String?
     let ownerId: String
+    var emoji: String?
     var colorHex: String
     var type: HabitType
     var targetPerDay: Int
@@ -118,15 +120,24 @@ struct Hive: Codable, Identifiable {
     var threshold: Int?
     var scheduleDaily: Bool
     var scheduleWeekmask: Int
-    var currentLength: Int
-    var lastAdvancedOn: String?
+    var isActive: Bool
+    var inviteCode: String?
     let createdAt: Date
+    var updatedAt: Date?
     var memberCount: Int?
-    
+    var maxMembers: Int?
+    var currentLength: Int?
+    var currentStreak: Int?
+    var longestStreak: Int?
+    var lastAdvancedOn: String?
+    var avgCompletion: Double?
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
+        case description
         case ownerId = "owner_id"
+        case emoji
         case colorHex = "color_hex"
         case type
         case targetPerDay = "target_per_day"
@@ -134,15 +145,21 @@ struct Hive: Codable, Identifiable {
         case threshold
         case scheduleDaily = "schedule_daily"
         case scheduleWeekmask = "schedule_weekmask"
-        case currentLength = "current_length"
-        case lastAdvancedOn = "last_advanced_on"
+        case isActive = "is_active"
+        case inviteCode = "invite_code"
         case createdAt = "created_at"
+        case updatedAt = "updated_at"
         case memberCount = "member_count"
+        case maxMembers = "max_members"
+        case currentLength = "current_length"
+        case currentStreak = "current_streak"
+        case longestStreak = "longest_streak"
+        case lastAdvancedOn = "last_advanced_on"
+        case avgCompletion = "avg_completion"
     }
-    
-    var color: Color {
-        Color(hex: colorHex)
-    }
+
+    var color: Color { Color(hex: colorHex) }
+    var groupStreak: Int { currentStreak ?? currentLength ?? 0 }
 }
 
 // MARK: - Hive Detail
@@ -150,6 +167,8 @@ struct HiveDetail: Codable {
     let id: String
     let name: String
     let ownerId: String
+    var description: String?
+    var emoji: String?
     var colorHex: String
     var type: HabitType
     var targetPerDay: Int
@@ -157,53 +176,99 @@ struct HiveDetail: Codable {
     var threshold: Int?
     var scheduleDaily: Bool
     var scheduleWeekmask: Int
-    var currentLength: Int
+    var isActive: Bool
+    var inviteCode: String?
+    var maxMembers: Int?
+    var currentLength: Int?
+    var currentStreak: Int?
+    var longestStreak: Int?
     var lastAdvancedOn: String?
     let createdAt: Date
+    var updatedAt: Date?
     var memberCount: Int?
-    var members: [HiveMember]
-    var todayStatus: TodayStatus
+    var avgCompletion: Double
+    var todaySummary: HiveTodaySummary
+    var members: [HiveMemberStatus]
     var recentActivity: [ActivityEvent]
 
     enum CodingKeys: String, CodingKey {
         case id, name
         case ownerId = "owner_id"
+        case description
+        case emoji
         case colorHex = "color_hex"
         case type
         case targetPerDay = "target_per_day"
         case rule, threshold
         case scheduleDaily = "schedule_daily"
         case scheduleWeekmask = "schedule_weekmask"
+        case isActive = "is_active"
+        case inviteCode = "invite_code"
+        case maxMembers = "max_members"
         case currentLength = "current_length"
+        case currentStreak = "current_streak"
+        case longestStreak = "longest_streak"
         case lastAdvancedOn = "last_advanced_on"
         case createdAt = "created_at"
+        case updatedAt = "updated_at"
         case memberCount = "member_count"
+        case avgCompletion = "avg_completion"
+        case todaySummary = "today_summary"
         case members
-        case todayStatus = "today_status"
         case recentActivity = "recent_activity"
     }
 }
 
-struct TodayStatus: Codable {
-    let completeCount: Int
-    let requiredCount: Int
-    let membersDone: [String]
+struct HiveTodaySummary: Codable {
+    let completed: Int
+    let partial: Int
+    let pending: Int
+    let total: Int
+    let completionRate: Double
 
     enum CodingKeys: String, CodingKey {
-        case completeCount = "complete_count"
-        case requiredCount = "required_count"
-        case membersDone = "members_done"
+        case completed
+        case partial
+        case pending
+        case total
+        case completionRate = "completion_rate"
+    }
+
+    var completedFraction: Double {
+        guard total > 0 else { return 0 }
+        return Double(completed) / Double(total)
+    }
+
+    var partialFraction: Double {
+        guard total > 0 else { return 0 }
+        return Double(partial) / Double(total)
+    }
+
+    var pendingFraction: Double {
+        guard total > 0 else { return 0 }
+        return Double(pending) / Double(total)
     }
 }
 
+enum HiveMemberStatusState: String, Codable {
+    case completed
+    case partial
+    case pending
+}
+
 // MARK: - Hive Member
-struct HiveMember: Codable, Identifiable {
+struct HiveMemberStatus: Codable, Identifiable {
     let hiveId: String
     let userId: String
     let role: String
     let joinedAt: Date
+    var leftAt: Date?
+    var isActive: Bool
     var displayName: String?
     var avatarUrl: String?
+    let status: HiveMemberStatusState
+    let value: Int
+    let targetPerDay: Int
     
     var id: String { "\(hiveId)-\(userId)" }
     
@@ -212,8 +277,31 @@ struct HiveMember: Codable, Identifiable {
         case userId = "user_id"
         case role
         case joinedAt = "joined_at"
+        case leftAt = "left_at"
+        case isActive = "is_active"
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
+        case status
+        case value
+        case targetPerDay = "target_per_day"
+    }
+}
+
+struct HiveMemberDay: Codable {
+    let hiveId: String
+    let userId: String
+    let dayDate: String
+    let value: Int
+    let done: Bool
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case hiveId = "hive_id"
+        case userId = "user_id"
+        case dayDate = "day_date"
+        case value
+        case done
+        case createdAt = "created_at"
     }
 }
 
@@ -362,6 +450,7 @@ struct CreateHiveFromHabitRequest: Codable {
 struct ProfileUpdate: Codable {
     let displayName: String?
     let avatarUrl: String?
+    let phone: String?
     let timezone: String?
     let dayStartHour: Int?
     let theme: String?
@@ -369,6 +458,7 @@ struct ProfileUpdate: Codable {
     enum CodingKeys: String, CodingKey {
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
+        case phone
         case timezone
         case dayStartHour = "day_start_hour"
         case theme
@@ -376,11 +466,13 @@ struct ProfileUpdate: Codable {
 
     init(displayName: String? = nil,
          avatarUrl: String? = nil,
+         phone: String? = nil,
          timezone: String? = nil,
          dayStartHour: Int? = nil,
          theme: String? = nil) {
         self.displayName = displayName
         self.avatarUrl = avatarUrl
+        self.phone = phone
         self.timezone = timezone
         self.dayStartHour = dayStartHour
         self.theme = theme

@@ -15,6 +15,7 @@ enum APIError: LocalizedError {
     case decodingError(String)
     case networkError(String)
     case serverError(Int, String)
+    case notImplemented
 
     var errorDescription: String? {
         switch self {
@@ -30,6 +31,8 @@ enum APIError: LocalizedError {
             return "Network error: \(message)"
         case .serverError(let status, let message):
             return "Server error (\(status)): \(message)"
+        case .notImplemented:
+            return "This feature is not yet implemented."
         }
     }
 }
@@ -222,7 +225,9 @@ private struct HiveListRow: Decodable {
 
     let id: String
     let name: String
+    let description: String?
     let ownerId: String
+    let emoji: String?
     let colorHex: String
     let type: HabitType
     let targetPerDay: Int
@@ -230,15 +235,22 @@ private struct HiveListRow: Decodable {
     let threshold: Int?
     let scheduleDaily: Bool
     let scheduleWeekmask: Int
-    let currentLength: Int
+    let maxMembers: Int
+    let currentStreak: Int
+    let longestStreak: Int
     let lastAdvancedOn: String?
+    let isActive: Bool
+    let inviteCode: String
     let createdAt: Date
+    let updatedAt: Date
     let hiveMembers: MembersCount?
 
     enum CodingKeys: String, CodingKey {
         case id
         case name
+        case description
         case ownerId = "owner_id"
+        case emoji
         case colorHex = "color_hex"
         case type
         case targetPerDay = "target_per_day"
@@ -246,9 +258,14 @@ private struct HiveListRow: Decodable {
         case threshold
         case scheduleDaily = "schedule_daily"
         case scheduleWeekmask = "schedule_weekmask"
-        case currentLength = "current_length"
+        case maxMembers = "max_members"
+        case currentStreak = "current_streak"
+        case longestStreak = "longest_streak"
         case lastAdvancedOn = "last_advanced_on"
+        case isActive = "is_active"
+        case inviteCode = "invite_code"
         case createdAt = "created_at"
+        case updatedAt = "updated_at"
         case hiveMembers = "hive_members"
     }
 }
@@ -268,6 +285,8 @@ private struct HiveMemberRow: Decodable {
     let userId: String
     let role: String
     let joinedAt: Date
+    let leftAt: Date?
+    let isActive: Bool?
     let profile: ProfilePreview?
 
     enum CodingKeys: String, CodingKey {
@@ -275,27 +294,13 @@ private struct HiveMemberRow: Decodable {
         case userId = "user_id"
         case role
         case joinedAt = "joined_at"
+        case leftAt = "left_at"
+        case isActive = "is_active"
         case profile = "profiles"
     }
 }
 
 private struct HiveDayRow: Decodable {
-    let hiveId: String
-    let userId: String
-    let dayDate: String
-    let value: Int
-    let done: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case hiveId = "hive_id"
-        case userId = "user_id"
-        case dayDate = "day_date"
-        case value
-        case done
-    }
-}
-
-struct HiveMemberDay: Decodable {
     let hiveId: String
     let userId: String
     let dayDate: String
@@ -552,84 +557,91 @@ final class APIClient: ObservableObject {
     // MARK: - Hives
 
     func getHives() async throws -> [Hive] {
-        try await ensureAuthenticated()
-        var query: [URLQueryItem] = [
-            URLQueryItem(name: "select", value: "*,hive_members(count)")
-        ]
-        let request = try buildRequest(path: "/rest/v1/hives", method: .get, queryItems: &query, body: Optional<EmptyCodable>.none)
-        let rows: [HiveListRow] = try await performRequest(request)
-        return rows.map { row in
-            Hive(
-                id: row.id,
-                name: row.name,
-                ownerId: row.ownerId,
-                colorHex: row.colorHex,
-                type: row.type,
-                targetPerDay: row.targetPerDay,
-                rule: row.rule,
-                threshold: row.threshold,
-                scheduleDaily: row.scheduleDaily,
-                scheduleWeekmask: row.scheduleWeekmask,
-                currentLength: row.currentLength,
-                lastAdvancedOn: row.lastAdvancedOn,
-                createdAt: row.createdAt,
-                memberCount: row.hiveMembers?.count
-            )
-        }
+        throw APIError.notImplemented
     }
 
     func createHiveFromHabit(habitId: String, name: String?, backfillDays: Int) async throws -> Hive {
-        try await ensureAuthenticated()
-        let payload = CreateHiveFromHabitPayload(p_habit_id: habitId, p_name: name, p_backfill_days: backfillDays)
-        var emptyQuery: [URLQueryItem] = []
-        let request = try buildRequest(path: "/rest/v1/rpc/create_hive_from_habit", method: .post, queryItems: &emptyQuery, body: payload)
-        let response: UUIDResponse = try await performRequest(request)
-        return try await getHiveSummary(hiveId: response.value)
+        throw APIError.notImplemented
     }
 
     func joinHive(code: String) async throws -> Hive {
-        try await ensureAuthenticated()
-        let payload = JoinHivePayload(p_code: code)
-        var emptyQuery: [URLQueryItem] = []
-        let request = try buildRequest(path: "/rest/v1/rpc/join_hive_with_code", method: .post, queryItems: &emptyQuery, body: payload)
-        let response: UUIDResponse = try await performRequest(request)
-        return try await getHiveSummary(hiveId: response.value)
+        throw APIError.notImplemented
     }
 
     func createHiveInvite(hiveId: String, ttlMinutes: Int = 10080, maxUses: Int = 20) async throws -> HiveInvite {
-        try await ensureAuthenticated()
-        let payload = CreateHiveInvitePayload(p_hive_id: hiveId, p_ttl_minutes: ttlMinutes, p_max_uses: maxUses)
-        var emptyQuery: [URLQueryItem] = []
-        let request = try buildRequest(path: "/rest/v1/rpc/create_hive_invite", method: .post, queryItems: &emptyQuery, body: payload)
-        return try await performRequest(request)
+        throw APIError.notImplemented
     }
 
     func logHiveDay(hiveId: String, value: Int) async throws -> HiveMemberDay {
-        try await ensureAuthenticated()
-        let payload = LogHiveTodayPayload(p_hive_id: hiveId, p_value: value)
-        var emptyQuery: [URLQueryItem] = []
-        let request = try buildRequest(path: "/rest/v1/rpc/log_hive_today", method: .post, queryItems: &emptyQuery, body: payload)
-        return try await performRequest(request)
+        throw APIError.notImplemented
     }
 
     func deleteHive(hiveId: String) async throws {
-        try await ensureAuthenticated()
-        var query = [URLQueryItem(name: "id", value: "eq.\(hiveId)")]
-        let request = try buildRequest(path: "/rest/v1/hives", method: .delete, queryItems: &query, body: Optional<EmptyCodable>.none)
-        _ = try await performRequest(request) as EmptyResponse
+        throw APIError.notImplemented
     }
 
     func getHiveDetail(hiveId: String) async throws -> HiveDetail {
         try await ensureAuthenticated()
         let hive = try await getHiveSummary(hiveId: hiveId)
-        let members = try await fetchHiveMembers(hiveId: hiveId)
-        let memberCount = hive.memberCount ?? members.count
-        let todayDone = try await fetchHiveDayStatus(hiveId: hiveId, memberCount: memberCount)
+        let memberRows = try await fetchHiveMemberRows(hiveId: hiveId)
+        let dayMap = try await fetchMemberDayMap(hiveId: hiveId)
         let activity = try await fetchHiveActivity(hiveId: hiveId)
+        let target = max(hive.targetPerDay, 1)
+
+        var completed = 0
+        var partial = 0
+        var pending = 0
+        var completionAccumulator = 0.0
+
+        let members: [HiveMemberStatus] = memberRows.map { row in
+            let entry = dayMap[row.userId] ?? .init(value: 0)
+            let value = entry.value
+
+            let status: HiveMemberStatusState
+            if value >= target {
+                status = .completed
+                completed += 1
+            } else if value > 0 {
+                status = .partial
+                partial += 1
+            } else {
+                status = .pending
+                pending += 1
+            }
+
+            completionAccumulator += min(Double(value) / Double(target), 1.0)
+
+            return HiveMemberStatus(
+                hiveId: row.hiveId,
+                userId: row.userId,
+                role: row.role,
+                joinedAt: row.joinedAt,
+                leftAt: row.leftAt,
+                isActive: row.isActive ?? true,
+                displayName: row.profile?.displayName,
+                avatarUrl: row.profile?.avatarUrl,
+                status: status,
+                value: value,
+                targetPerDay: target
+            )
+        }
+
+        let memberCount = members.count
+        let completionRate = memberCount > 0 ? (completionAccumulator / Double(memberCount)) * 100 : 0
+        let todaySummary = HiveTodaySummary(
+            completed: completed,
+            partial: partial,
+            pending: pending,
+            total: memberCount,
+            completionRate: completionRate
+        )
+
         return HiveDetail(
             id: hive.id,
             name: hive.name,
             ownerId: hive.ownerId,
+            description: hive.description,
+            emoji: hive.emoji,
             colorHex: hive.colorHex,
             type: hive.type,
             targetPerDay: hive.targetPerDay,
@@ -637,12 +649,19 @@ final class APIClient: ObservableObject {
             threshold: hive.threshold,
             scheduleDaily: hive.scheduleDaily,
             scheduleWeekmask: hive.scheduleWeekmask,
+            isActive: hive.isActive,
+            inviteCode: hive.inviteCode,
+            maxMembers: hive.maxMembers,
             currentLength: hive.currentLength,
+            currentStreak: hive.currentStreak,
+            longestStreak: hive.longestStreak,
             lastAdvancedOn: hive.lastAdvancedOn,
             createdAt: hive.createdAt,
+            updatedAt: hive.updatedAt,
             memberCount: memberCount,
+            avgCompletion: completionRate,
+            todaySummary: todaySummary,
             members: members,
-            todayStatus: todayDone,
             recentActivity: activity
         )
     }
@@ -720,26 +739,18 @@ final class APIClient: ObservableObject {
         return hive
     }
 
-    private func fetchHiveMembers(hiveId: String) async throws -> [HiveMember] {
+    private func fetchHiveMemberRows(hiveId: String) async throws -> [HiveMemberRow] {
         var query = [
             URLQueryItem(name: "hive_id", value: "eq.\(hiveId)"),
             URLQueryItem(name: "select", value: "hive_id,user_id,role,joined_at,profiles(display_name,avatar_url)")
         ]
         let request = try buildRequest(path: "/rest/v1/hive_members", method: .get, queryItems: &query, body: Optional<EmptyCodable>.none)
-        let rows: [HiveMemberRow] = try await performRequest(request)
-        return rows.map { row in
-            HiveMember(
-                hiveId: row.hiveId,
-                userId: row.userId,
-                role: row.role,
-                joinedAt: row.joinedAt,
-                displayName: row.profile?.displayName,
-                avatarUrl: row.profile?.avatarUrl
-            )
-        }
+        return try await performRequest(request)
     }
 
-    private func fetchHiveDayStatus(hiveId: String, memberCount: Int) async throws -> TodayStatus {
+    private struct HiveMemberDayStatus { let value: Int }
+
+    private func fetchMemberDayMap(hiveId: String) async throws -> [String: HiveMemberDayStatus] {
         let date = try await userLocalDateForCurrentUser()
         var query = [
             URLQueryItem(name: "hive_id", value: "eq.\(hiveId)"),
@@ -747,13 +758,11 @@ final class APIClient: ObservableObject {
         ]
         let request = try buildRequest(path: "/rest/v1/hive_member_days", method: .get, queryItems: &query, body: Optional<EmptyCodable>.none)
         let rows: [HiveDayRow] = try await performRequest(request)
-        let membersDone = rows.filter { $0.done }.map { $0.userId }
-        let todayStatus = TodayStatus(
-            completeCount: membersDone.count,
-            requiredCount: memberCount,
-            membersDone: membersDone
-        )
-        return todayStatus
+        var map: [String: HiveMemberDayStatus] = [:]
+        for row in rows {
+            map[row.userId] = HiveMemberDayStatus(value: row.value)
+        }
+        return map
     }
 
     private func userLocalDateForCurrentUser() async throws -> String {

@@ -223,7 +223,7 @@ async def get_milestones(
         for hive_id in user_hive_ids:
             if hive_id in test_hives:
                 hive = test_hives[hive_id]
-                if hive["current_length"] >= 7:
+                if hive.get("current_streak", 0) >= 7:
                     milestones.append({
                         "type": "hive_week_streak",
                         "hive_name": hive["name"],

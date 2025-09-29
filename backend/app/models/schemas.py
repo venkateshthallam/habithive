@@ -32,6 +32,9 @@ class AppleSignInRequest(BaseModel):
     id_token: str
     nonce: Optional[str] = None
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
 class AuthResponse(BaseModel):
     access_token: str
     refresh_token: Optional[str] = None
@@ -42,6 +45,7 @@ class AuthResponse(BaseModel):
 class ProfileBase(BaseModel):
     display_name: str = "New Bee"
     avatar_url: Optional[str] = None
+    phone: Optional[str] = None
     timezone: str = "America/New_York"
     day_start_hour: int = Field(4, ge=0, le=23)
     theme: Theme = Theme.honey
@@ -52,6 +56,7 @@ class ProfileCreate(ProfileBase):
 class ProfileUpdate(BaseModel):
     display_name: Optional[str] = None
     avatar_url: Optional[str] = None
+    phone: Optional[str] = None
     timezone: Optional[str] = None
     day_start_hour: Optional[int] = Field(None, ge=0, le=23)
     theme: Optional[Theme] = None
@@ -125,16 +130,32 @@ class LogHabitRequest(BaseModel):
 # Hive Models
 class HiveBase(BaseModel):
     name: str
-    color_hex: str = "#FF9F1C"
+    description: Optional[str] = None
+    emoji: Optional[str] = "🍯"
+    color_hex: str = "#FFB84C"
     type: HabitType = HabitType.checkbox
     target_per_day: int = Field(1, gt=0)
-    rule: str = "all_must_complete"
+    rule: Literal["all_must_complete", "threshold"] = "all_must_complete"
     threshold: Optional[int] = None
     schedule_daily: bool = True
     schedule_weekmask: int = Field(127, ge=0, le=127)
+    max_members: int = Field(10, ge=2, le=10)
 
 class HiveCreate(HiveBase):
     pass
+
+class HiveUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    emoji: Optional[str] = None
+    color_hex: Optional[str] = None
+    target_per_day: Optional[int] = Field(None, gt=0)
+    rule: Optional[Literal["all_must_complete", "threshold"]] = None
+    threshold: Optional[int] = None
+    schedule_daily: Optional[bool] = None
+    schedule_weekmask: Optional[int] = Field(None, ge=0, le=127)
+    max_members: Optional[int] = Field(None, ge=2, le=10)
+    is_active: Optional[bool] = None
 
 class HiveFromHabit(BaseModel):
     habit_id: UUID
@@ -144,9 +165,14 @@ class HiveFromHabit(BaseModel):
 class Hive(HiveBase):
     id: UUID
     owner_id: UUID
-    current_length: int = 0
+    current_length: Optional[int] = None
+    current_streak: Optional[int] = None
+    longest_streak: Optional[int] = None
     last_advanced_on: Optional[date] = None
+    is_active: bool = True
+    invite_code: Optional[str] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
     member_count: Optional[int] = None
 
 # Hive Member Models
@@ -155,6 +181,8 @@ class HiveMember(BaseModel):
     user_id: UUID
     role: str = "member"
     joined_at: datetime
+    left_at: Optional[datetime] = None
+    is_active: bool = True
     display_name: Optional[str] = None
     avatar_url: Optional[str] = None
 
@@ -164,6 +192,7 @@ class HiveMemberDay(BaseModel):
     day_date: date
     value: int
     done: bool
+    created_at: Optional[datetime] = None
 
 class LogHiveRequest(BaseModel):
     hive_id: UUID
@@ -206,9 +235,24 @@ class HabitWithLogs(Habit):
     current_streak: int = 0
     completion_rate: float = 0.0
 
+class HiveTodaySummary(BaseModel):
+    completed: int = 0
+    partial: int = 0
+    pending: int = 0
+    total: int = 0
+    completion_rate: float = 0.0
+
+
+class HiveMemberStatus(HiveMember):
+    status: Literal["completed", "partial", "pending"] = "pending"
+    value: int = 0
+    target_per_day: int = 1
+
+
 class HiveDetail(Hive):
-    members: List[HiveMember] = []
-    today_status: dict = {}
+    avg_completion: float = 0.0
+    today_summary: HiveTodaySummary = HiveTodaySummary()
+    members: List[HiveMemberStatus] = []
     recent_activity: List[ActivityEvent] = []
 
 class HabitStreakSummary(BaseModel):

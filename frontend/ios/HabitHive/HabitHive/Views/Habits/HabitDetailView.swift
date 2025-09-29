@@ -57,6 +57,7 @@ struct HabitDetailView: View {
             }
         }
         .onAppear {
+            viewModel.configure(with: habit)
             viewModel.loadHabitDetails(habitId: habit.id)
         }
         .onReceive(viewModel.$habit.compactMap { $0 }) { updated in
@@ -442,6 +443,13 @@ class HabitDetailViewModel: ObservableObject {
         return CGFloat(min(todayValue, target)) / CGFloat(target)
     }
 
+    @MainActor
+    func configure(with habit: Habit) {
+        self.habit = habit
+        self.logs = habit.recentLogs ?? []
+        calculateStats(for: habit)
+    }
+
     func loadHabitDetails(habitId: String) {
         Task { await loadHabitDetailsAsync(habitId: habitId) }
     }
@@ -480,7 +488,7 @@ class HabitDetailViewModel: ObservableObject {
             isCompletedToday = false
         }
 
-        totalDays = logs.count
+        totalDays = Set(logs.map { $0.logDate }).count
     }
 
     func toggleToday(for habit: Habit) {
@@ -493,6 +501,9 @@ class HabitDetailViewModel: ObservableObject {
             let logDate = DateFormatter.hiveDayFormatter.date(from: removedLog.logDate)
             Task {
                 do {
+#if canImport(UIKit)
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+#endif
                     try await apiClient.deleteHabitLog(habitId: habit.id, logDate: logDate)
                     await loadHabitDetailsAsync(habitId: habit.id)
                 } catch {
@@ -516,6 +527,9 @@ class HabitDetailViewModel: ObservableObject {
 
             Task {
                 do {
+#if canImport(UIKit)
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+#endif
                     _ = try await apiClient.logHabit(habitId: habit.id, value: value)
                     await loadHabitDetailsAsync(habitId: habit.id)
                 } catch {

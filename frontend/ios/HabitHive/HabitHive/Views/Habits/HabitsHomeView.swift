@@ -190,12 +190,18 @@ struct HabitsHomeView: View {
         if let log = todayLog {
             let removed = viewModel.optimisticToggle(habit: habit, value: log.value, adding: false)
             if removed {
+#if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+#endif
                 viewModel.deleteHabitLog(habitId: habit.id, logDateString: log.logDate)
             }
         } else {
             let value = habit.type == .counter ? habit.targetPerDay : 1
             let added = viewModel.optimisticToggle(habit: habit, value: value, adding: true)
             if added {
+#if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+#endif
                 viewModel.logHabit(habitId: habit.id, value: value)
                 honeyPourHabitId = habit.id
                 showHoneyPour = true

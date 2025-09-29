@@ -38,6 +38,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     # Verify with Supabase JWT
     try:
         print(f"Attempting to decode token: {token[:50]}...")  # Debug: show first 50 chars
+        print(f"TEST_MODE is set to: {settings.TEST_MODE}")  # Debug: show test mode setting
 
         # Decode the JWT to get user info
         # Supabase JWTs are standard JWTs that we can decode and verify
@@ -60,16 +61,23 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
             print(f"Token expiration check - Exp: {exp_time}, Now: {current_time}, Diff: {time_diff} seconds")
 
-            # Temporarily allow expired tokens for debugging
-            # TODO: Re-enable proper expiration checking once token refresh is working
-            if time_diff > 86400:  # Only reject if more than 1 day old
-                print(f"Token expired by {time_diff} seconds (more than 1 day)")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token expired"
-                )
-            elif time_diff > 0:
-                print(f"Token expired but allowing for debugging ({time_diff} seconds)")
+            # Handle token expiration with configurable skew tolerance to account for
+            # clock drift between Supabase and the API server.
+            if time_diff > 0:
+                max_skew = settings.AUTH_TOKEN_MAX_SKEW_SECONDS
+                if settings.TEST_MODE:
+                    print(f"Test mode: allowing expired token (expired by {time_diff} seconds)")
+                elif time_diff > max_skew:
+                    print(f"Token expired by {time_diff} seconds (max allowed {max_skew})")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Token expired"
+                    )
+                else:
+                    print(
+                        "Token expired but within configured tolerance "
+                        f"({time_diff} <= {max_skew}); continuing"
+                    )
         else:
             print("No expiration time in token")
 

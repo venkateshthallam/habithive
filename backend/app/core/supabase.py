@@ -12,9 +12,25 @@ def get_supabase_client(access_token: Optional[str] = None) -> Client:
         )
     
     if access_token:
-        # Create client with user's access token
+        # Create a client scoped to the caller's access token. We avoid set_session
+        # because the SDK raises AuthSessionMissingError when no refresh token is
+        # provided (our mobile clients only pass the access token). Instead we
+        # wire the access token directly into the PostgREST/Storage auth layers
+        # so row level security evaluates with the caller's identity.
         client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-        client.auth.set_session(access_token, "")
+        client.postgrest.auth(access_token)
+
+        # Storage and functions also need the user token to respect RLS.
+        try:
+            client.storage.auth(access_token)
+        except AttributeError:
+            pass
+
+        try:
+            client.functions.set_auth(access_token)
+        except AttributeError:
+            pass
+
         return client
     
     # Default client with anon key

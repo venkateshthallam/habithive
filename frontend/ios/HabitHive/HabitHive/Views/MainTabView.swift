@@ -109,114 +109,24 @@ struct HivesView: View {
     }
 
     private var summaryCard: some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.md) {
-            Text("Overall Completion")
-                .font(HiveTypography.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack)
-
-            VStack(alignment: .leading, spacing: HiveSpacing.sm) {
-                HStack(alignment: .lastTextBaseline) {
-                    Text(String(format: "%.0f%%", viewModel.overallCompletion))
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
-                        .foregroundColor(HiveColors.beeBlack)
-
-                    Spacer()
-
-                    VStack(alignment: .trailing, spacing: HiveSpacing.xs) {
-                        Text("Today")
-                            .font(HiveTypography.caption)
-                            .foregroundColor(HiveColors.beeBlack.opacity(0.6))
-                        Text("\(viewModel.completedToday) logged")
-                            .font(HiveTypography.caption)
-                            .foregroundColor(HiveColors.honeyGradientEnd)
-                    }
-                }
-
-                ProgressView(value: min(max(viewModel.overallCompletion / 100, 0), 1))
-                    .tint(HiveColors.mintSuccess)
-                    .scaleEffect(x: 1, y: 2, anchor: .center)
-            }
-        }
-        .padding(HiveSpacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+        SummaryCard(
+            overallCompletion: viewModel.overallCompletion,
+            completedToday: viewModel.completedToday,
+            theme: themeManager.currentTheme
         )
     }
 
     private var weeklyProgressCard: some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.md) {
-            Text("This Week")
-                .font(HiveTypography.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack)
-
-            HStack(alignment: .bottom, spacing: HiveSpacing.sm) {
-                let labels = ["S","M","T","W","T","F","S"]
-                let maxValue = max(viewModel.weeklyProgress.max() ?? 1, 1)
-                ForEach(Array(viewModel.weeklyProgress.enumerated()), id: \.offset) { index, value in
-                    VStack(spacing: HiveSpacing.xs) {
-                        RoundedRectangle(cornerRadius: HiveRadius.small)
-                            .fill(HiveColors.honeyGradientEnd.opacity(0.85))
-                            .frame(width: 24, height: max(CGFloat(value) / CGFloat(maxValue), 0.05) * 90)
-
-                        Text(labels[index % labels.count])
-                            .font(HiveTypography.caption)
-                            .foregroundColor(HiveColors.beeBlack.opacity(0.6))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-            }
-        }
-        .padding(HiveSpacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+        WeeklyProgressCard(
+            weeklyProgress: viewModel.weeklyProgress,
+            theme: themeManager.currentTheme
         )
     }
 
     private var streaksCard: some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.md) {
-            Text("Current Streaks")
-                .font(HiveTypography.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack)
-
-            if viewModel.currentStreaks.isEmpty {
-                Text("No streaks yet — start pouring honey!")
-                    .font(HiveTypography.body)
-                    .foregroundColor(HiveColors.beeBlack.opacity(0.6))
-            } else {
-                VStack(spacing: HiveSpacing.sm) {
-                    ForEach(viewModel.currentStreaks) { streak in
-                        HStack(spacing: HiveSpacing.md) {
-                            Text(streak.emoji ?? "🐝")
-                                .font(.system(size: 28))
-                            Text(streak.name)
-                                .font(HiveTypography.body)
-                                .foregroundColor(HiveColors.beeBlack)
-                            Spacer()
-                            Text("\(streak.streak) 🔥")
-                                .font(HiveTypography.headline)
-                                .foregroundColor(HiveColors.honeyGradientEnd)
-                        }
-                        .padding(HiveSpacing.md)
-                        .background(
-                            RoundedRectangle(cornerRadius: HiveRadius.medium)
-                                .fill(HiveColors.lightGray)
-                        )
-                    }
-                }
-            }
-        }
-        .padding(HiveSpacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+        StreaksCard(
+            currentStreaks: viewModel.currentStreaks,
+            theme: themeManager.currentTheme
         )
     }
 
@@ -227,7 +137,7 @@ struct HivesView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(HiveColors.beeBlack)
 
-            YearHeatmapView(data: viewModel.yearComb)
+            YearHeatmapView(data: viewModel.yearComb, theme: themeManager.currentTheme)
         }
         .padding(HiveSpacing.lg)
         .background(
@@ -427,32 +337,38 @@ struct HiveCard: View {
             HiveAvatarStack(memberCount: hive.memberCount ?? 0, accentColor: hive.color, theme: theme)
 
             HStack(spacing: HiveSpacing.sm) {
-                HiveCardStat(title: "Shared Streak", value: "\(hive.currentLength) days", theme: theme)
-                HiveCardStat(title: "Members", value: "\(hive.memberCount ?? 0)", theme: theme)
-                HiveCardStat(title: "Target", value: targetStatValue, theme: theme)
-            }
+            let maxMembers = hive.maxMembers ?? 10
+            HiveCardStat(title: "Shared Streak", value: "\(hive.groupStreak) days", theme: theme)
+            HiveCardStat(title: "Members", value: "\(hive.memberCount ?? 0)/\(maxMembers)", theme: theme)
+            HiveCardStat(title: "Target", value: targetStatValue, theme: theme)
+        }
         }
         .padding(HiveSpacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(theme == .night ? Color.white.opacity(0.06) : Color.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: HiveRadius.large)
-                        .fill(
-                            LinearGradient(
-                                colors: [hive.color.opacity(0.15), Color.clear],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .clipped()
+        .background(backgroundView)
+    }
+
+    private var backgroundView: some View {
+        let base = RoundedRectangle(cornerRadius: HiveRadius.large)
+            .fill(theme == .night ? Color.white.opacity(0.06) : Color.white)
+
+        let sheen = RoundedRectangle(cornerRadius: HiveRadius.large)
+            .fill(
+                LinearGradient(
+                    colors: [hive.color.opacity(0.15), Color.clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: HiveRadius.large)
-                        .stroke(hive.color.opacity(theme == .night ? 0.18 : 0.22), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(theme == .night ? 0.35 : 0.06), radius: 14, x: 0, y: 10)
-        )
+            )
+
+        let stroke = RoundedRectangle(cornerRadius: HiveRadius.large)
+            .stroke(hive.color.opacity(theme == .night ? 0.18 : 0.22), lineWidth: 1)
+
+        let shadowColor = Color.black.opacity(theme == .night ? 0.35 : 0.06)
+
+        return base
+            .overlay(sheen)
+            .overlay(stroke)
+            .shadow(color: shadowColor, radius: 14, x: 0, y: 10)
     }
 }
 
@@ -675,7 +591,7 @@ class HivesViewModel: ObservableObject {
     func joinHive(code: String) {
         Task {
             do {
-                _ = try await apiClient.joinHive(code: code)
+                try await apiClient.joinHive(code: code)
                 await loadHivesAsync()
             } catch {
                 await MainActor.run { self.errorMessage = error.localizedDescription }
@@ -721,7 +637,7 @@ class HivesViewModel: ObservableObject {
         for hive in hives {
             do {
                 let detail = try await fetchHiveDetail(hiveId: hive.id)
-                let membersDone = Set(detail.todayStatus.membersDone)
+                let membersDone = Set(detail.members.filter { $0.status == .completed }.map { $0.userId })
 
                 for member in detail.members {
                     var entry = accumulator[member.userId] ?? HiveLeaderboardEntry(
@@ -829,11 +745,11 @@ struct InsightsView: View {
             } else {
                 ScrollView {
                     VStack(spacing: HiveSpacing.lg) {
-                        SummaryCard(overallCompletion: viewModel.overallCompletion, completedToday: viewModel.completedToday)
-                        WeeklyProgressCard(weeklyProgress: viewModel.weeklyProgress)
-                        StreaksCard(currentStreaks: viewModel.currentStreaks)
-                        YearOverviewCard(yearData: viewModel.yearComb)
-                        BestHabitCard(bestPerformer: viewModel.bestPerformer)
+                        SummaryCard(overallCompletion: viewModel.overallCompletion, completedToday: viewModel.completedToday, theme: themeManager.currentTheme)
+                        WeeklyProgressCard(weeklyProgress: viewModel.weeklyProgress, theme: themeManager.currentTheme)
+                        StreaksCard(currentStreaks: viewModel.currentStreaks, theme: themeManager.currentTheme)
+                        YearOverviewCard(yearData: viewModel.yearComb, theme: themeManager.currentTheme)
+                        BestHabitCard(bestPerformer: viewModel.bestPerformer, theme: themeManager.currentTheme)
                     }
                     .padding(.horizontal, HiveSpacing.lg)
                     .padding(.bottom, HiveSpacing.xl)
@@ -1059,8 +975,7 @@ struct ProfileView: View {
 var body: some View {
         NavigationView {
             ZStack {
-                // Gradient background like other screens
-                themeManager.currentTheme.primaryGradient
+                themeManager.currentTheme.backgroundColor
                     .ignoresSafeArea()
 
                 ScrollView {
@@ -1069,9 +984,9 @@ var body: some View {
                         VStack(spacing: HiveSpacing.lg) {
                             ZStack {
                                 Circle()
-                                    .fill(Color.white.opacity(0.2))
+                                    .fill(themeManager.currentTheme.cardBackgroundColor)
                                     .frame(width: 120, height: 120)
-                                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                                    .shadow(color: Color.black.opacity(themeManager.currentTheme == .night ? 0.45 : 0.08), radius: 10, x: 0, y: 5)
 
                                 Circle()
                                     .fill(
@@ -1092,15 +1007,15 @@ var body: some View {
                                 if isEditingName {
                                     TextField("Display Name", text: $newDisplayName)
                                         .font(HiveTypography.title2)
-                                        .foregroundColor(.white)
+                                        .foregroundColor(themeManager.currentTheme.primaryTextColor)
                                         .multilineTextAlignment(.center)
                                         .padding(HiveSpacing.sm)
                                         .background(
                                             RoundedRectangle(cornerRadius: HiveRadius.medium)
-                                                .fill(Color.white.opacity(0.2))
+                                                .fill(themeManager.currentTheme.cardBackgroundColor.opacity(0.6))
                                                 .overlay(
                                                     RoundedRectangle(cornerRadius: HiveRadius.medium)
-                                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                                        .stroke(themeManager.currentTheme.secondaryTextColor.opacity(0.3), lineWidth: 1)
                                                 )
                                         )
                                         .frame(maxWidth: 200)
@@ -1112,18 +1027,25 @@ var body: some View {
                                     Text(viewModel.displayName)
                                         .font(HiveTypography.title2)
                                         .fontWeight(.bold)
-                                        .foregroundColor(.white)
+                                        .foregroundColor(themeManager.currentTheme.primaryTextColor)
                                         .onTapGesture {
                                             newDisplayName = viewModel.displayName
                                             isEditingName = true
                                         }
                                 }
 
-                                Text(viewModel.phone)
+                                Text(viewModel.phone.isEmpty ? "Add your phone to find friends" : viewModel.phone)
                                     .font(HiveTypography.body)
-                                    .foregroundColor(.white.opacity(0.8))
+                                    .foregroundColor(themeManager.currentTheme.secondaryTextColor)
                             }
                         }
+                        .padding(HiveSpacing.lg)
+                        .background(
+                            RoundedRectangle(cornerRadius: HiveRadius.xlarge)
+                                .fill(themeManager.currentTheme.cardBackgroundColor)
+                                .shadow(color: Color.black.opacity(themeManager.currentTheme == .night ? 0.45 : 0.08), radius: 12, x: 0, y: 6)
+                        )
+                        .padding(.horizontal, HiveSpacing.lg)
                         .padding(.top, HiveSpacing.xl)
 
                         // Settings card with enhanced styling
@@ -1134,11 +1056,12 @@ var body: some View {
                                 value: viewModel.notificationsEnabled ? "On" : "Off",
                                 action: {
                                     viewModel.toggleNotifications()
-                                }
+                                },
+                                theme: themeManager.currentTheme
                             )
 
                             Divider()
-                                .background(Color.white.opacity(0.1))
+                                .background(themeManager.currentTheme.secondaryTextColor.opacity(0.15))
 
                             SettingsRow(
                                 icon: "moon",
@@ -1146,11 +1069,12 @@ var body: some View {
                                 value: themeManager.currentTheme.rawValue.capitalized,
                                 action: {
                                     viewModel.showThemeSelector = true
-                                }
+                                },
+                                theme: themeManager.currentTheme
                             )
 
                             Divider()
-                                .background(Color.white.opacity(0.1))
+                                .background(themeManager.currentTheme.secondaryTextColor.opacity(0.15))
 
                             SettingsRow(
                                 icon: "clock",
@@ -1158,11 +1082,12 @@ var body: some View {
                                 value: viewModel.dayStartTime,
                                 action: {
                                     viewModel.showTimeSelector = true
-                                }
+                                },
+                                theme: themeManager.currentTheme
                             )
 
                             Divider()
-                                .background(Color.white.opacity(0.1))
+                                .background(themeManager.currentTheme.secondaryTextColor.opacity(0.15))
 
                             SettingsRow(
                                 icon: "arrow.right.square",
@@ -1170,11 +1095,12 @@ var body: some View {
                                 isDestructive: true,
                                 action: {
                                     apiClient.logout()
-                                }
+                                },
+                                theme: themeManager.currentTheme
                             )
 
                             Divider()
-                                .background(Color.white.opacity(0.1))
+                                .background(themeManager.currentTheme.secondaryTextColor.opacity(0.15))
 
                             SettingsRow(
                                 icon: "trash",
@@ -1182,16 +1108,18 @@ var body: some View {
                                 isDestructive: true,
                                 action: {
                                     viewModel.requestDeleteAccount()
-                                }
+                                },
+                                theme: themeManager.currentTheme
                             )
                         }
                         .background(
                             RoundedRectangle(cornerRadius: HiveRadius.xlarge)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(themeManager.currentTheme.cardBackgroundColor)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: HiveRadius.xlarge)
-                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                        .stroke(themeManager.currentTheme.secondaryTextColor.opacity(0.15), lineWidth: 1)
                                 )
+                                .shadow(color: Color.black.opacity(themeManager.currentTheme == .night ? 0.45 : 0.08), radius: 10, x: 0, y: 6)
                         )
                         .padding(.horizontal, HiveSpacing.lg)
 
@@ -1212,7 +1140,7 @@ var body: some View {
                             .padding(.vertical, HiveSpacing.lg)
                             .background(
                                 RoundedRectangle(cornerRadius: HiveRadius.large)
-                                    .fill(Color.white)
+                                    .fill(themeManager.currentTheme.cardBackgroundColor)
                                     .shadow(color: .black.opacity(0.2), radius: 12, x: 0, y: 6)
                             )
                     }
@@ -1315,30 +1243,31 @@ struct SettingsRow: View {
     var value: String? = nil
     var isDestructive: Bool = false
     let action: () -> Void
+    let theme: AppTheme
 
     var body: some View {
         Button(action: action) {
             HStack {
                 Image(systemName: icon)
                     .font(.system(size: 20))
-                    .foregroundColor(isDestructive ? Color.red.opacity(0.8) : .white)
+                    .foregroundColor(isDestructive ? Color.red.opacity(0.8) : theme.primaryTextColor)
                     .frame(width: 30)
 
                 Text(title)
                     .font(HiveTypography.body)
-                    .foregroundColor(isDestructive ? Color.red.opacity(0.8) : .white)
+                    .foregroundColor(isDestructive ? Color.red.opacity(0.8) : theme.primaryTextColor)
 
                 Spacer()
 
                 if let value = value {
                     Text(value)
                         .font(HiveTypography.caption)
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(theme.secondaryTextColor)
                 }
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(theme.secondaryTextColor)
             }
             .padding(.vertical, HiveSpacing.md)
             .padding(.horizontal, HiveSpacing.lg)
@@ -1500,11 +1429,12 @@ class CreateHiveViewModel: ObservableObject {
 // MARK: - Year Heatmap View
 struct YearHeatmapView: View {
     let data: [String: Int]
+    let theme: AppTheme
 
     var body: some View {
-        Text("Year Overview")
+        Text("Comb view coming soon")
             .font(HiveTypography.body)
-            .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+            .foregroundColor(theme.secondaryTextColor)
     }
 }
 
@@ -1563,26 +1493,27 @@ struct HabitSelectionRow: View {
 struct SummaryCard: View {
     let overallCompletion: Double
     let completedToday: Int
+    let theme: AppTheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: HiveSpacing.md) {
             Text("Overall Completion")
                 .font(HiveTypography.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack)
+                .foregroundColor(theme.primaryTextColor)
 
             VStack(alignment: .leading, spacing: HiveSpacing.sm) {
                 HStack(alignment: .lastTextBaseline) {
                     Text(String(format: "%.0f%%", overallCompletion))
                         .font(.system(size: 44, weight: .bold, design: .rounded))
-                        .foregroundColor(HiveColors.beeBlack)
+                        .foregroundColor(theme.primaryTextColor)
 
                     Spacer()
 
                     VStack(alignment: .trailing, spacing: HiveSpacing.xs) {
                         Text("Today")
                             .font(HiveTypography.caption)
-                            .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                            .foregroundColor(theme.secondaryTextColor)
                         Text("\(completedToday) logged")
                             .font(HiveTypography.caption)
                             .foregroundColor(HiveColors.honeyGradientEnd)
@@ -1597,21 +1528,22 @@ struct SummaryCard: View {
         .padding(HiveSpacing.lg)
         .background(
             RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 12, x: 0, y: 8)
         )
     }
 }
 
 struct WeeklyProgressCard: View {
     let weeklyProgress: [Int]
+    let theme: AppTheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: HiveSpacing.md) {
             Text("This Week")
                 .font(HiveTypography.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack)
+                .foregroundColor(theme.primaryTextColor)
 
             HStack(alignment: .bottom, spacing: HiveSpacing.sm) {
                 let labels = ["S","M","T","W","T","F","S"]
@@ -1624,7 +1556,7 @@ struct WeeklyProgressCard: View {
 
                         Text(labels[index % labels.count])
                             .font(HiveTypography.caption)
-                            .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                            .foregroundColor(theme.secondaryTextColor)
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -1633,26 +1565,27 @@ struct WeeklyProgressCard: View {
         .padding(HiveSpacing.lg)
         .background(
             RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 12, x: 0, y: 8)
         )
     }
 }
 
 struct StreaksCard: View {
     let currentStreaks: [HabitStreakDisplay]
+    let theme: AppTheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: HiveSpacing.md) {
             Text("Current Streaks")
                 .font(HiveTypography.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack)
+                .foregroundColor(theme.primaryTextColor)
 
             if currentStreaks.isEmpty {
                 Text("No streaks yet — start pouring honey!")
                     .font(HiveTypography.body)
-                    .foregroundColor(HiveColors.beeBlack.opacity(0.6))
+                    .foregroundColor(theme.secondaryTextColor)
             } else {
                 VStack(spacing: HiveSpacing.sm) {
                     ForEach(currentStreaks) { streak in
@@ -1661,7 +1594,7 @@ struct StreaksCard: View {
                                 .font(.system(size: 28))
                             Text(streak.name)
                                 .font(HiveTypography.body)
-                                .foregroundColor(HiveColors.beeBlack)
+                                .foregroundColor(theme.primaryTextColor)
                             Spacer()
                             Text("\(streak.streak) 🔥")
                                 .font(HiveTypography.headline)
@@ -1679,69 +1612,73 @@ struct StreaksCard: View {
         .padding(HiveSpacing.lg)
         .background(
             RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 12, x: 0, y: 8)
         )
     }
 }
 
 struct YearOverviewCard: View {
     let yearData: [String: Int]
+    let theme: AppTheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: HiveSpacing.md) {
             Text("Year Overview")
                 .font(HiveTypography.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(HiveColors.beeBlack)
+                .foregroundColor(theme.primaryTextColor)
 
-            YearHeatmapView(data: yearData)
+            YearHeatmapView(data: yearData, theme: theme)
         }
         .padding(HiveSpacing.lg)
         .background(
             RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 12, x: 0, y: 8)
         )
     }
 }
 
 struct BestHabitCard: View {
     let bestPerformer: HabitPerformanceSummary?
+    let theme: AppTheme
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+            Text("Best Performing")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(theme.primaryTextColor)
+
             if let best = bestPerformer {
-                VStack(alignment: .leading, spacing: HiveSpacing.sm) {
-                    Text("Best Performing")
-                        .font(HiveTypography.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(HiveColors.beeBlack)
+                HStack(spacing: HiveSpacing.md) {
+                    Text(best.emoji ?? "🏆")
+                        .font(.system(size: 32))
 
-                    HStack(spacing: HiveSpacing.md) {
-                        Text(best.emoji ?? "🏆")
-                            .font(.system(size: 32))
+                    VStack(alignment: .leading, spacing: HiveSpacing.xs) {
+                        Text(best.name)
+                            .font(HiveTypography.body)
+                            .foregroundColor(theme.primaryTextColor)
 
-                        VStack(alignment: .leading, spacing: HiveSpacing.xs) {
-                            Text(best.name)
-                                .font(HiveTypography.body)
-                                .foregroundColor(HiveColors.beeBlack)
-
-                            Text(String(format: "%.0f%% completion", best.completionRate))
-                                .font(HiveTypography.caption)
-                                .foregroundColor(HiveColors.beeBlack.opacity(0.6))
-                        }
-
-                        Spacer()
+                        Text(String(format: "%.0f%% complete", best.completionRate))
+                            .font(HiveTypography.caption)
+                            .foregroundColor(theme.secondaryTextColor)
                     }
+
+                    Spacer()
                 }
-                .padding(HiveSpacing.lg)
-                .background(
-                    RoundedRectangle(cornerRadius: HiveRadius.large)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 8)
-                )
+            } else {
+                Text("Keep logging to unlock your top habit")
+                    .font(HiveTypography.body)
+                    .foregroundColor(theme.secondaryTextColor)
             }
         }
+        .padding(HiveSpacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 12, x: 0, y: 8)
+        )
     }
 }

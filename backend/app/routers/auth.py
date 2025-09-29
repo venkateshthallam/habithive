@@ -1,5 +1,11 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-from app.models.schemas import PhoneAuthRequest, VerifyOTPRequest, AppleSignInRequest, AuthResponse
+from app.models.schemas import (
+    PhoneAuthRequest,
+    VerifyOTPRequest,
+    AppleSignInRequest,
+    RefreshTokenRequest,
+    AuthResponse,
+)
 from app.core.config import settings
 from app.core.auth import create_test_token, get_current_user
 from app.core.supabase import get_supabase_client, get_supabase_admin
@@ -104,11 +110,17 @@ async def apple_signin(request: AppleSignInRequest):
         )
 
 @router.post("/refresh", response_model=AuthResponse)
-async def refresh_token(refresh_token: str):
+async def refresh_token(request: RefreshTokenRequest):
     """Refresh access token"""
     try:
         supabase = get_supabase_client()
-        response = supabase.auth.refresh_session(refresh_token)
+        if not request.refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing refresh token"
+            )
+
+        response = supabase.auth.refresh_session(request.refresh_token)
         
         return AuthResponse(
             access_token=response.session.access_token,

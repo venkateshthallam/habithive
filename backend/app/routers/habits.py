@@ -5,7 +5,7 @@ from app.models.schemas import (
     HabitStreakSummary, HabitPerformance, InsightsResponse
 )
 from app.core.auth import get_current_user
-from app.core.supabase import get_user_supabase_client
+from app.core.supabase import get_user_supabase_client, get_supabase_admin
 from app.core.config import settings
 from typing import Dict, Any, List, Optional
 from datetime import datetime, date, timedelta
@@ -79,11 +79,27 @@ async def get_habits(
         return result
     
     try:
-        supabase = get_user_supabase_client(current_user)
-        
-        # Get habits
-        response = supabase.table("habits").select("*").eq("user_id", user_id).eq("is_active", True).execute()
+        print(f"Getting habits for user: {user_id}")
+        supabase = get_supabase_admin()
+
+        # Get habits for the authenticated user using the service role to avoid
+        # issues with expired caller tokens while still scoping to the caller's
+        # user_id.
+        response = (
+            supabase
+            .table("habits")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("is_active", True)
+            .order("created_at", desc=True)
+            .execute()
+        )
+
+        if getattr(response, "error", None):
+            raise Exception(response.error.get("message", "Unable to fetch habits"))
+
         habits = response.data or []
+        print(f"Found {len(habits)} habits for user {user_id}")
         
         result = []
         for habit in habits:
@@ -92,9 +108,19 @@ async def get_habits(
             if include_logs:
                 # Get recent logs
                 start_date = (date.today() - timedelta(days=days)).isoformat()
-                logs_response = supabase.table("habit_logs").select("*").eq(
-                    "habit_id", habit["id"]
-                ).gte("log_date", start_date).execute()
+                logs_response = (
+                    supabase
+                    .table("habit_logs")
+                    .select("*")
+                    .eq("habit_id", habit["id"])
+                    .eq("user_id", user_id)
+                    .gte("log_date", start_date)
+                    .order("log_date", desc=True)
+                    .execute()
+                )
+
+                if getattr(logs_response, "error", None):
+                    raise Exception(logs_response.error.get("message", "Unable to fetch logs"))
                 
                 logs = logs_response.data or []
                 habit_with_logs.recent_logs = [HabitLog(**l) for l in logs]
@@ -185,8 +211,19 @@ async def get_habit(
         return habit_with_logs
     
     try:
-        supabase = get_user_supabase_client(current_user)
-        response = supabase.table("habits").select("*").eq("id", habit_id).eq("user_id", user_id).single().execute()
+        supabase = get_supabase_admin()
+        response = (
+            supabase
+            .table("habits")
+            .select("*")
+            .eq("id", habit_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+
+        if getattr(response, "error", None):
+            raise Exception(response.error.get("message", "Unable to fetch habit"))
         
         if not response.data:
             raise HTTPException(status_code=404, detail="Habit not found")
@@ -194,7 +231,19 @@ async def get_habit(
         habit_with_logs = HabitWithLogs(**response.data)
         
         if include_logs:
-            logs_response = supabase.table("habit_logs").select("*").eq("habit_id", habit_id).execute()
+            logs_response = (
+                supabase
+                .table("habit_logs")
+                .select("*")
+                .eq("habit_id", habit_id)
+                .eq("user_id", user_id)
+                .order("log_date", desc=True)
+                .execute()
+            )
+
+            if getattr(logs_response, "error", None):
+                raise Exception(logs_response.error.get("message", "Unable to fetch logs"))
+            
             logs = logs_response.data or []
             habit_with_logs.recent_logs = [HabitLog(**l) for l in logs]
             habit_with_logs.current_streak = calculate_streak(logs)

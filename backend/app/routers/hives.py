@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from app.models.schemas import (
-    Hive, HiveCreate, HiveFromHabit, HiveDetail,
+    Hive, HiveCreate, HiveUpdate, HiveFromHabit,
     HiveMember, HiveMemberDay, LogHiveRequest,
-    HiveInvite, HiveInviteCreate, JoinHiveRequest
+    HiveInvite, HiveInviteCreate, JoinHiveRequest,
+    HiveDetail, HiveMemberStatus, HiveTodaySummary,
 )
 from app.core.auth import get_current_user
 from app.core.supabase import get_user_supabase_client
@@ -43,42 +44,337 @@ async def get_hives(
 ):
     """Get all hives the user is a member of"""
     user_id = current_user["id"]
-    
+
     if settings.TEST_MODE:
-        # Get hives where user is a member
-        user_hive_ids = [m["hive_id"] for m in test_hive_members.values() 
-                        if m["user_id"] == user_id]
-        
-        hives = []
+        # Get hives where user is an active member
+        user_hive_ids = [m["hive_id"] for m in test_hive_members.values()
+                         if m["user_id"] == user_id and m.get("is_active", True)]
+
+        hives: List[Hive] = []
         for hive_id in user_hive_ids:
             if hive_id in test_hives:
                 hive = test_hives[hive_id].copy()
-                # Add member count
-                member_count = len([m for m in test_hive_members.values() 
-                                  if m["hive_id"] == hive_id])
+                hive.setdefault("current_streak", hive.get("current_streak", 0))
+                hive.setdefault("longest_streak", hive.get("longest_streak", 0))
+                hive.setdefault("invite_code", hive.get("invite_code", generate_invite_code()))
+                member_count = len([
+                    m for m in test_hive_members.values()
+                    if m["hive_id"] == hive_id and m.get("is_active", True)
+                ])
                 hive["member_count"] = member_count
                 hives.append(Hive(**hive))
-        
+
         return hives
-    
+
     try:
         supabase = get_user_supabase_client(current_user)
-        
+
         # Get hives where user is a member
-        member_response = supabase.table("hive_members").select("hive_id").eq("user_id", user_id).execute()
-        hive_ids = [m["hive_id"] for m in member_response.data]
-        
+        member_response = supabase.table("hive_members").select("hive_id").eq("user_id", user_id).eq("is_active", True).execute()
+        hive_ids = [m["hive_id"] for m in (member_response.data or [])]
+
         if not hive_ids:
             return []
-        
+
         # Get hive details
-        hives_response = supabase.table("hives").select("*, hive_members(count)").in_("id", hive_ids).execute()
-        
-        return [Hive(**h) for h in hives_response.data]
+        hives_response = (
+            supabase
+            .table("hives")
+            .select("*")
+            .in_("id", hive_ids)
+            .eq("is_active", True)
+            .order("updated_at", desc=True)
+            .execute()
+        )
+
+        hives: List[Hive] = []
+        for raw in hives_response.data or []:
+            member_count_resp = (
+                supabase
+                .table("hive_members")
+                .select("user_id", count='exact')
+                .eq("hive_id", raw["id"])  # type: ignore[index]
+                .eq("is_active", True)
+                .execute()
+            )
+            member_count = getattr(member_count_resp, "count", None) or 0
+            raw["member_count"] = member_count
+            hives.append(Hive(**raw))
+
+        return hives
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch hives: {str(e)}"
+        )
+
+
+@router.get("/{hive_id}", response_model=HiveDetail)
+async def get_hive_detail(
+    hive_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Return an enriched hive snapshot for the detail screen."""
+    user_id = current_user["id"]
+
+    if settings.TEST_MODE:
+        if hive_id not in test_hives:
+            raise HTTPException(status_code=404, detail="Hive not found")
+
+        hive = test_hives[hive_id].copy()
+
+        members_raw = [
+            m for m in test_hive_members.values()
+            if m["hive_id"] == hive_id and m.get("is_active", True)
+        ]
+
+        if not any(m["user_id"] == user_id for m in members_raw):
+            raise HTTPException(status_code=403, detail="Not a member of this hive")
+
+        today = date.today()
+        target = hive.get("target_per_day", 1)
+
+        member_status: List[HiveMemberStatus] = []
+        completed = partial = pending = 0
+        completion_total = 0.0
+
+        for member in members_raw:
+            profile = get_test_profiles().get(member["user_id"], {})
+            day_entry = next((d for d in test_hive_member_days.values()
+                              if d["hive_id"] == hive_id and d["user_id"] == member["user_id"]
+                              and d["day_date"] == today), None)
+            raw_value = day_entry.get("value", 0) if day_entry else 0
+            value = int(raw_value)
+            if value >= target:
+                status_key = "completed"
+                completed += 1
+            elif value > 0:
+                status_key = "partial"
+                partial += 1
+            else:
+                status_key = "pending"
+                pending += 1
+
+            completion_total += min(value / target, 1.0) if target > 0 else 0
+
+            member_status.append(
+                HiveMemberStatus(
+                    hive_id=hive_id,
+                    user_id=member["user_id"],
+                    role=member.get("role", "member"),
+                    joined_at=member["joined_at"],
+                    left_at=member.get("left_at"),
+                    is_active=member.get("is_active", True),
+                    display_name=profile.get("display_name"),
+                    avatar_url=profile.get("avatar_url"),
+                    status=status_key,  # type: ignore[arg-type]
+                    value=value,
+                    target_per_day=target,
+                )
+            )
+
+        total_members = len(member_status)
+        avg_completion = (completion_total / total_members) * 100 if total_members else 0.0
+
+        today_summary = HiveTodaySummary(
+            completed=completed,
+            partial=partial,
+            pending=pending,
+            total=total_members,
+            completion_rate=avg_completion,
+        )
+
+        hive.setdefault("current_streak", hive.get("current_length", 0))
+        hive.setdefault("longest_streak", hive.get("current_streak", 0))
+        hive.setdefault("member_count", total_members)
+        hive.setdefault("invite_code", hive.get("invite_code", ""))
+        hive.setdefault("updated_at", hive.get("updated_at", hive.get("created_at")))
+
+        return HiveDetail(
+            **hive,
+            avg_completion=avg_completion,
+            today_summary=today_summary,
+            members=member_status,
+            recent_activity=[],
+        )
+
+    try:
+        supabase = get_user_supabase_client(current_user)
+
+        hive_response = (
+            supabase
+            .table("hives")
+            .select("*")
+            .eq("id", hive_id)
+            .eq("is_active", True)
+            .single()
+            .execute()
+        )
+
+        if not hive_response.data:
+            raise HTTPException(status_code=404, detail="Hive not found")
+
+        # Confirm membership
+        membership_check = (
+            supabase
+            .table("hive_members")
+            .select("hive_id")
+            .eq("hive_id", hive_id)
+            .eq("user_id", user_id)
+            .eq("is_active", True)
+            .limit(1)
+            .execute()
+        )
+
+        if not membership_check.data:
+            raise HTTPException(status_code=403, detail="Not a member of this hive")
+
+        # Get hive members
+        members_response = (
+            supabase
+            .table("hive_members")
+            .select("*")
+            .eq("hive_id", hive_id)
+            .eq("is_active", True)
+            .execute()
+        )
+
+        members_data = members_response.data or []
+
+        # Get profiles for members separately
+        if members_data:
+            user_ids = [member["user_id"] for member in members_data]
+            profiles_response = (
+                supabase
+                .table("profiles")
+                .select("id, display_name, avatar_url")
+                .in_("id", user_ids)
+                .execute()
+            )
+            profiles_lookup = {p["id"]: p for p in (profiles_response.data or [])}
+
+            # Add profile info to members
+            for member in members_data:
+                member["profiles"] = profiles_lookup.get(member["user_id"], {})
+        member_count = len(members_data)
+
+        today_iso = date.today().isoformat()
+        day_response = (
+            supabase
+            .table("hive_member_days")
+            .select("user_id,value")
+            .eq("hive_id", hive_id)
+            .eq("day_date", today_iso)
+            .execute()
+        )
+        day_lookup = {item["user_id"]: item for item in (day_response.data or [])}
+
+        target = hive_response.data.get("target_per_day", 1) or 1
+
+        member_status: List[HiveMemberStatus] = []
+        completed = partial = pending = 0
+        completion_total = 0.0
+
+        for entry in members_data:
+            raw_value = 0
+            if day_lookup.get(entry["user_id"]):
+                raw_value = day_lookup[entry["user_id"]].get("value", 0) or 0
+            value = int(raw_value)
+
+            if value >= target:
+                status_key = "completed"
+                completed += 1
+            elif value > 0:
+                status_key = "partial"
+                partial += 1
+            else:
+                status_key = "pending"
+                pending += 1
+
+            completion_total += min(value / target, 1.0) if target > 0 else 0
+
+            profile = entry.get("profiles") or {}
+            member_status.append(
+                HiveMemberStatus(
+                    hive_id=entry["hive_id"],
+                    user_id=entry["user_id"],
+                    role=entry.get("role", "member"),
+                    joined_at=entry["joined_at"],
+                    left_at=entry.get("left_at"),
+                    is_active=entry.get("is_active", True),
+                    display_name=profile.get("display_name"),
+                    avatar_url=profile.get("avatar_url"),
+                    status=status_key,  # type: ignore[arg-type]
+                    value=value,
+                    target_per_day=target,
+                )
+            )
+
+        total_members = len(member_status)
+        today_completion = (completion_total / total_members) * 100 if total_members else 0.0
+
+        today_summary = HiveTodaySummary(
+            completed=completed,
+            partial=partial,
+            pending=pending,
+            total=total_members,
+            completion_rate=today_completion,
+        )
+
+        seven_days_ago = (date.today() - timedelta(days=6)).isoformat()
+        hive_days_response = (
+            supabase
+            .table("hive_days")
+            .select("complete_count, required_count")
+            .eq("hive_id", hive_id)
+            .gte("day_date", seven_days_ago)
+            .order("day_date", desc=True)
+            .limit(7)
+            .execute()
+        )
+
+        ratios = []
+        for row in hive_days_response.data or []:
+            required = row.get("required_count") or 0
+            complete = row.get("complete_count") or 0
+            if required > 0:
+                ratios.append(min(complete / required, 1.0))
+
+        avg_completion = (sum(ratios) / len(ratios)) * 100 if ratios else today_completion
+
+        activity_response = (
+            supabase
+            .table("activity_events")
+            .select("*")
+            .eq("hive_id", hive_id)
+            .order("created_at", desc=True)
+            .limit(20)
+            .execute()
+        )
+
+        hive_row = hive_response.data
+        hive_row.setdefault("current_streak", hive_row.get("current_length"))
+        hive_row.setdefault("longest_streak", hive_row.get("current_streak"))
+        hive_row.setdefault("member_count", member_count)
+        hive_row.setdefault("invite_code", hive_row.get("invite_code"))
+        hive_row.setdefault("updated_at", hive_row.get("updated_at", hive_row.get("created_at")))
+
+        return HiveDetail(
+            **hive_row,
+            avg_completion=avg_completion,
+            today_summary=today_summary,
+            members=member_status,
+            recent_activity=activity_response.data or [],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Hive detail error for hive_id {hive_id}: {type(e).__name__}: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch hive details: {str(e)}"
         )
 
 @router.post("/", response_model=Hive)
@@ -91,51 +387,136 @@ async def create_hive(
     
     if settings.TEST_MODE:
         hive_id = str(uuid.uuid4())
+        payload = hive.dict()
         new_hive = {
             "id": hive_id,
             "owner_id": user_id,
-            **hive.dict(),
-            "current_length": 0,
+            **payload,
+            "current_streak": 0,
+            "longest_streak": 0,
             "last_advanced_on": None,
-            "created_at": datetime.utcnow()
+            "invite_code": generate_invite_code(),
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
         }
         test_hives[hive_id] = new_hive
-        
+
         # Add owner as member
         member_id = str(uuid.uuid4())
         test_hive_members[member_id] = {
             "hive_id": hive_id,
             "user_id": user_id,
             "role": "owner",
-            "joined_at": datetime.utcnow()
+            "joined_at": datetime.utcnow(),
+            "is_active": True
         }
-        
+
         new_hive["member_count"] = 1
         return Hive(**new_hive)
-    
+
     try:
         supabase = get_user_supabase_client(current_user)
-        
+
         # Create hive
+        hive_payload = hive.dict(exclude_unset=True)
         hive_data = {
+            **hive_payload,
             "owner_id": user_id,
-            **hive.dict()
         }
         hive_response = supabase.table("hives").insert(hive_data).execute()
-        hive_id = hive_response.data[0]["id"]
-        
+        hive_row = hive_response.data[0]
+        hive_id = hive_row["id"]
+
         # Add owner as member
         supabase.table("hive_members").insert({
             "hive_id": hive_id,
             "user_id": user_id,
             "role": "owner"
         }).execute()
-        
-        return Hive(**hive_response.data[0])
+
+        hive_row["member_count"] = 1
+        return Hive(**hive_row)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create hive: {str(e)}"
+        )
+
+
+@router.patch("/{hive_id}", response_model=Hive)
+async def update_hive(
+    hive_id: str,
+    updates: HiveUpdate,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Update hive settings (owner only)."""
+    user_id = current_user["id"]
+
+    if settings.TEST_MODE:
+        if hive_id not in test_hives:
+            raise HTTPException(status_code=404, detail="Hive not found")
+
+        hive = test_hives[hive_id]
+        if hive["owner_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Only the owner can update the hive")
+
+        payload = updates.dict(exclude_unset=True)
+        for key, value in payload.items():
+            hive[key] = value
+        hive["updated_at"] = datetime.utcnow()
+        test_hives[hive_id] = hive
+        hive["member_count"] = len([
+            m for m in test_hive_members.values()
+            if m["hive_id"] == hive_id and m.get("is_active", True)
+        ])
+        return Hive(**hive)
+
+    try:
+        supabase = get_user_supabase_client(current_user)
+
+        hive_response = supabase.table("hives").select("owner_id").eq("id", hive_id).single().execute()
+        hive_data = hive_response.data
+
+        if not hive_data:
+            raise HTTPException(status_code=404, detail="Hive not found")
+
+        if hive_data["owner_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Only the owner can update the hive")
+
+        update_data = updates.dict(exclude_unset=True)
+        if not update_data:
+            current = supabase.table("hives").select("*").eq("id", hive_id).single().execute().data
+            current["member_count"] = getattr(
+                supabase.table("hive_members").select("user_id", count='exact').eq("hive_id", hive_id).eq("is_active", True).execute(),
+                "count",
+                0,
+            )
+            return Hive(**current)
+
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+
+        response = supabase.table("hives").update(update_data).eq("id", hive_id).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Hive not found")
+
+        updated_row = response.data[0]
+        member_count_resp = (
+            supabase
+            .table("hive_members")
+            .select("user_id", count='exact')
+            .eq("hive_id", hive_id)
+            .eq("is_active", True)
+            .execute()
+        )
+        updated_row["member_count"] = getattr(member_count_resp, "count", None) or 0
+
+        return Hive(**updated_row)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update hive: {str(e)}"
         )
 
 
@@ -219,7 +600,9 @@ async def create_hive_from_habit(
         new_hive = {
             "id": hive_id,
             "name": request.name or habit["name"],
+            "description": None,
             "owner_id": user_id,
+            "emoji": habit.get("emoji"),
             "color_hex": habit["color_hex"],
             "type": habit["type"],
             "target_per_day": habit["target_per_day"],
@@ -227,21 +610,26 @@ async def create_hive_from_habit(
             "threshold": None,
             "schedule_daily": habit["schedule_daily"],
             "schedule_weekmask": habit["schedule_weekmask"],
-            "current_length": 0,
+            "max_members": 10,
+            "current_streak": 0,
+            "longest_streak": 0,
             "last_advanced_on": None,
-            "created_at": datetime.utcnow()
+            "invite_code": generate_invite_code(),
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
         }
         test_hives[hive_id] = new_hive
-        
+
         # Add owner as member
         member_id = str(uuid.uuid4())
         test_hive_members[member_id] = {
             "hive_id": hive_id,
             "user_id": user_id,
             "role": "owner",
-            "joined_at": datetime.utcnow()
+            "joined_at": datetime.utcnow(),
+            "is_active": True
         }
-        
+
         # Backfill logs if requested
         if request.backfill_days > 0:
             test_logs = get_test_logs()
@@ -278,128 +666,18 @@ async def create_hive_from_habit(
         # Get the created hive
         hive_response = supabase.table("hives").select("*").eq("id", hive_id).single().execute()
         
-        return Hive(**hive_response.data)
+        hive_row = hive_response.data
+        hive_row["member_count"] = getattr(
+            supabase.table("hive_members").select("user_id", count='exact').eq("hive_id", hive_id).eq("is_active", True).execute(),
+            "count",
+            0,
+        )
+
+        return Hive(**hive_row)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create hive from habit: {str(e)}"
-        )
-
-@router.get("/{hive_id}", response_model=HiveDetail)
-async def get_hive_detail(
-    hive_id: str,
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Get detailed hive information"""
-    user_id = current_user["id"]
-    
-    if settings.TEST_MODE:
-        if hive_id not in test_hives:
-            raise HTTPException(status_code=404, detail="Hive not found")
-        
-        # Check if user is a member
-        is_member = any(m["hive_id"] == hive_id and m["user_id"] == user_id 
-                       for m in test_hive_members.values())
-        if not is_member:
-            raise HTTPException(status_code=403, detail="Not a member of this hive")
-        
-        hive = test_hives[hive_id].copy()
-        
-        # Get members
-        members = []
-        test_profiles = get_test_profiles()
-        for m in test_hive_members.values():
-            if m["hive_id"] == hive_id:
-                member = HiveMember(**m)
-                # Add profile info if available
-                if m["user_id"] in test_profiles:
-                    profile = test_profiles[m["user_id"]]
-                    member.display_name = profile["display_name"]
-                    member.avatar_url = profile["avatar_url"]
-                members.append(member)
-        
-        # Get today's status
-        today = date.today()
-        today_status = {
-            "complete_count": 0,
-            "required_count": len(members),
-            "members_done": []
-        }
-        
-        for member in members:
-            member_done = any(
-                d["hive_id"] == hive_id and 
-                d["user_id"] == member.user_id and 
-                d["day_date"] == today and 
-                d["done"]
-                for d in test_hive_member_days.values()
-            )
-            if member_done:
-                today_status["complete_count"] += 1
-                today_status["members_done"].append(str(member.user_id))
-        
-        hive["member_count"] = len(members)
-        
-        return HiveDetail(
-            **hive,
-            members=members,
-            today_status=today_status,
-            recent_activity=[]
-        )
-    
-    try:
-        supabase = get_user_supabase_client(current_user)
-        
-        # Get hive
-        hive_response = supabase.table("hives").select("*").eq("id", hive_id).single().execute()
-        
-        if not hive_response.data:
-            raise HTTPException(status_code=404, detail="Hive not found")
-        
-        # Check membership
-        member_check = supabase.table("hive_members").select("*").eq("hive_id", hive_id).eq("user_id", user_id).execute()
-        
-        if not member_check.data:
-            raise HTTPException(status_code=403, detail="Not a member of this hive")
-        
-        # Get all members
-        members_response = supabase.table("hive_members").select("*, profiles(display_name, avatar_url)").eq("hive_id", hive_id).execute()
-        
-        members = []
-        for m in members_response.data:
-            member = HiveMember(
-                hive_id=m["hive_id"],
-                user_id=m["user_id"],
-                role=m["role"],
-                joined_at=m["joined_at"],
-                display_name=m.get("profiles", {}).get("display_name"),
-                avatar_url=m.get("profiles", {}).get("avatar_url")
-            )
-            members.append(member)
-        
-        # Get today's status
-        today = date.today().isoformat()
-        today_status_response = supabase.table("hive_member_days").select("*").eq("hive_id", hive_id).eq("day_date", today).execute()
-        
-        today_status = {
-            "complete_count": len([d for d in today_status_response.data if d["done"]]),
-            "required_count": len(members),
-            "members_done": [d["user_id"] for d in today_status_response.data if d["done"]]
-        }
-        
-        # Get recent activity
-        activity_response = supabase.table("activity_events").select("*").eq("hive_id", hive_id).order("created_at", desc=True).limit(20).execute()
-        
-        return HiveDetail(
-            **hive_response.data,
-            members=members,
-            today_status=today_status,
-            recent_activity=activity_response.data or []
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch hive details: {str(e)}"
         )
 
 @router.post("/{hive_id}/invite", response_model=HiveInvite)
@@ -433,20 +711,30 @@ async def create_hive_invite(
             "created_at": datetime.utcnow()
         }
         test_hive_invites[code] = new_invite
-        
+        if hive_id in test_hives:
+            test_hives[hive_id]["invite_code"] = code
+
         return HiveInvite(**new_invite)
     
     try:
         supabase = get_user_supabase_client(current_user)
-        
+
         # Call create_hive_invite RPC
         response = supabase.rpc("create_hive_invite", {
             "p_hive_id": hive_id,
             "p_ttl_minutes": invite.ttl_minutes,
             "p_max_uses": invite.max_uses
         }).execute()
-        
-        return HiveInvite(**response.data)
+
+        invite_row = response.data
+
+        # Also update the hive's default invite code for quick sharing
+        supabase.table("hives").update({
+            "invite_code": invite_row["code"],
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("id", hive_id).execute()
+
+        return HiveInvite(**invite_row)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -518,6 +806,68 @@ async def join_hive(
             detail=f"Failed to join hive: {str(e)}"
         )
 
+
+@router.post("/{hive_id}/leave", response_model=dict)
+async def leave_hive(
+    hive_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Leave a hive as a member."""
+    user_id = current_user["id"]
+
+    if settings.TEST_MODE:
+        membership_items = [
+            (key, member)
+            for key, member in test_hive_members.items()
+            if member["hive_id"] == hive_id and member["user_id"] == user_id and member.get("is_active", True)
+        ]
+
+        if not membership_items:
+            raise HTTPException(status_code=404, detail="Membership not found")
+
+        key, member = membership_items[0]
+        if member.get("role") == "owner":
+            raise HTTPException(status_code=403, detail="Transfer ownership before leaving the hive")
+
+        test_hive_members[key]["is_active"] = False
+        test_hive_members[key]["left_at"] = datetime.utcnow()
+        return {"success": True}
+
+    try:
+        supabase = get_user_supabase_client(current_user)
+
+        membership = (
+            supabase
+            .table("hive_members")
+            .select("role")
+            .eq("hive_id", hive_id)
+            .eq("user_id", user_id)
+            .eq("is_active", True)
+            .execute()
+        )
+
+        if not membership.data:
+            raise HTTPException(status_code=404, detail="Membership not found")
+
+        member_row = membership.data[0]
+
+        if member_row.get("role") == "owner":
+            raise HTTPException(status_code=403, detail="Transfer ownership before leaving the hive")
+
+        supabase.table("hive_members").update({
+            "is_active": False,
+            "left_at": datetime.utcnow().isoformat()
+        }).eq("hive_id", hive_id).eq("user_id", user_id).execute()
+
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to leave hive: {str(e)}"
+        )
+
 @router.post("/{hive_id}/log", response_model=HiveMemberDay)
 async def log_hive_day(
     hive_id: str,
@@ -567,7 +917,20 @@ async def log_hive_day(
     
     try:
         supabase = get_user_supabase_client(current_user)
-        
+
+        membership = (
+            supabase
+            .table("hive_members")
+            .select("role")
+            .eq("hive_id", hive_id)
+            .eq("user_id", user_id)
+            .eq("is_active", True)
+            .execute()
+        )
+
+        if not membership.data:
+            raise HTTPException(status_code=403, detail="Not a member of this hive")
+
         # Call log_hive_today RPC
         response = supabase.rpc("log_hive_today", {
             "p_hive_id": hive_id,
@@ -603,7 +966,10 @@ async def advance_hive_day(
         target_day = day or date.today()
         
         # Count members
-        members = [m for m in test_hive_members.values() if m["hive_id"] == hive_id]
+        members = [
+            m for m in test_hive_members.values()
+            if m["hive_id"] == hive_id and m.get("is_active", True)
+        ]
         required_count = len(members)
         
         # Count completions
@@ -625,7 +991,8 @@ async def advance_hive_day(
         if advanced:
             hive = test_hives[hive_id]
             if not hive["last_advanced_on"] or hive["last_advanced_on"] < target_day:
-                hive["current_length"] += 1
+                hive["current_streak"] = hive.get("current_streak", 0) + 1
+                hive["longest_streak"] = max(hive.get("longest_streak", 0), hive["current_streak"])
                 hive["last_advanced_on"] = target_day
         
         return {

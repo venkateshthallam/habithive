@@ -51,6 +51,14 @@ private struct AppleSignInRequest: Encodable {
     }
 }
 
+private struct RefreshTokenRequest: Encodable {
+    let refreshToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case refreshToken = "refresh_token"
+    }
+}
+
 
 @MainActor
 final class FastAPIClient: ObservableObject {
@@ -69,10 +77,10 @@ final class FastAPIClient: ObservableObject {
     private let phoneStorageKey = "fastapi.phone"
     private let onboardingCompleteKey = "fastapi.onboardingComplete"
 
+    private var accessTokenExpiry: Date?
     private var accessToken: String? {
         didSet {
-            isAuthenticated = accessToken != nil
-            UserDefaults.standard.set(accessToken, forKey: sessionStorageKey)
+            storeAccessToken(accessToken)
         }
     }
 
@@ -99,15 +107,15 @@ final class FastAPIClient: ObservableObject {
             let container = try decoder.singleValueContainer()
             let string = try container.decode(String.self)
 
-            let iso8601WithFractional = ISO8601DateFormatter()
-            iso8601WithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = iso8601WithFractional.date(from: string) {
+            if let date = ISO8601DateFormatter.full.date(from: string) {
                 return date
             }
 
-            let iso8601Basic = ISO8601DateFormatter()
-            iso8601Basic.formatOptions = [.withInternetDateTime]
-            if let date = iso8601Basic.date(from: string) {
+            if let date = ISO8601DateFormatter.withoutFractional.date(from: string) {
+                return date
+            }
+
+            if let date = DateFormats.apiDay.date(from: string) {
                 return date
             }
 
@@ -121,7 +129,6 @@ final class FastAPIClient: ObservableObject {
             Task { @MainActor in
                 accessToken = saved
                 refreshToken = savedRefresh
-                isAuthenticated = true
                 await loadCurrentUser()
             }
         }
@@ -146,8 +153,7 @@ final class FastAPIClient: ObservableObject {
             body: request
         )
 
-        accessToken = response.accessToken
-        refreshToken = response.refreshToken
+        applyAuthResponse(response)
         clearOnboardingCompletion()
         savePhone(response.phone)
         hasLoadedProfile = false
@@ -162,8 +168,7 @@ final class FastAPIClient: ObservableObject {
             body: request
         )
 
-        accessToken = response.accessToken
-        refreshToken = response.refreshToken
+        applyAuthResponse(response)
         clearOnboardingCompletion()
         savePhone(response.phone)
         hasLoadedProfile = false
@@ -180,8 +185,7 @@ final class FastAPIClient: ObservableObject {
             body: request
         )
 
-        accessToken = response.accessToken
-        refreshToken = response.refreshToken
+        applyAuthResponse(response)
         clearOnboardingCompletion()
         savePhone(response.phone)
         hasLoadedProfile = false
@@ -221,11 +225,13 @@ final class FastAPIClient: ObservableObject {
             )
 
             let persistedPhone = storedPhone()
+            let resolvedPhone = profile.phone ?? persistedPhone
+            savePhone(resolvedPhone)
 
             // Convert to User model (you may need to adjust this mapping)
             let user = User(
                 id: profile.id,
-                phone: persistedPhone,
+                phone: resolvedPhone,
                 displayName: profile.displayName,
                 avatarUrl: profile.avatarUrl,
                 timezone: profile.timezone,
@@ -250,9 +256,12 @@ final class FastAPIClient: ObservableObject {
             requiresAuth: true
         )
 
+        let resolvedPhone = profile.phone ?? currentUser?.phone ?? ""
+        savePhone(resolvedPhone)
+
         let user = User(
             id: profile.id,
-            phone: currentUser?.phone ?? "",
+            phone: resolvedPhone,
             displayName: profile.displayName,
             avatarUrl: profile.avatarUrl,
             timezone: profile.timezone,
@@ -266,13 +275,10 @@ final class FastAPIClient: ObservableObject {
     }
 
     func updatePhoneNumber(_ phoneNumber: String) async throws {
-        // For now, just update locally since FastAPI backend handles phone in auth
-        if var user = currentUser {
-            user.phone = phoneNumber
-            currentUser = user
-            savePhone(phoneNumber)
-            evaluateProfileSetup(for: user)
-        }
+        guard isAuthenticated else { throw FastAPIError.unauthorized }
+
+        let normalized = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        let _ = try await updateProfile(ProfileUpdate(phone: normalized.isEmpty ? nil : normalized))
     }
 
     func getMyProfile() async throws -> User {
@@ -321,7 +327,7 @@ final class FastAPIClient: ObservableObject {
         )
 
         return response.map { habitResponse in
-            Habit(
+            var habitModel = Habit(
                 id: habitResponse.id.uuidString,
                 userId: habitResponse.user_id.uuidString,
                 name: habitResponse.name,
@@ -346,6 +352,10 @@ final class FastAPIClient: ObservableObject {
                     )
                 } ?? []
             )
+
+            habitModel.currentStreak = habitResponse.current_streak
+            habitModel.completionRate = habitResponse.completion_rate
+            return habitModel
         }
     }
 
@@ -503,54 +513,118 @@ final class FastAPIClient: ObservableObject {
         }
     }
 
-    // MARK: - Hives (Stub implementations - to be completed based on your backend)
+    // MARK: - Hives
 
     func getHives() async throws -> [Hive] {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
-        // TODO: Implement when hives endpoint is ready
-        return []
+        return try await performRequest(
+            path: "/api/hives/",
+            method: .get,
+            requiresAuth: true
+        )
     }
 
     func createHiveFromHabit(habitId: String, name: String?, backfillDays: Int) async throws -> Hive {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
-        // TODO: Implement when hives endpoint is ready
-        throw FastAPIError.serverError(501, "Hives not implemented yet")
+        let request = CreateHiveFromHabitPayload(
+            habitId: habitId,
+            name: name,
+            backfillDays: backfillDays
+        )
+
+        return try await performRequest(
+            path: "/api/hives/from-habit",
+            method: .post,
+            body: request,
+            requiresAuth: true
+        )
     }
 
-    func joinHive(code: String) async throws -> Hive {
+    func updateHive(hiveId: String, update: HiveUpdatePayload) async throws -> Hive {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
-        // TODO: Implement when hives endpoint is ready
-        throw FastAPIError.serverError(501, "Hives not implemented yet")
-    }
-
-    func getHiveDetail(hiveId: String) async throws -> HiveDetail {
-        guard isAuthenticated else { throw FastAPIError.unauthorized }
-        // TODO: Implement when hives endpoint is ready
-        throw FastAPIError.serverError(501, "Hives not implemented yet")
-    }
-
-    func logHiveDay(hiveId: String, value: Int) async throws -> HiveMemberDay {
-        guard isAuthenticated else { throw FastAPIError.unauthorized }
-        // TODO: Implement when hives endpoint is ready
-        throw FastAPIError.serverError(501, "Hives not implemented yet")
-    }
-
-    func createHiveInvite(hiveId: String, ttlMinutes: Int = 10080, maxUses: Int = 20) async throws -> HiveInvite {
-        guard isAuthenticated else { throw FastAPIError.unauthorized }
-        // TODO: Implement when hives endpoint is ready
-        throw FastAPIError.serverError(501, "Hives not implemented yet")
+        return try await performRequest(
+            path: "/api/hives/\(hiveId)",
+            method: .patch,
+            body: update,
+            requiresAuth: true
+        )
     }
 
     func deleteHive(hiveId: String) async throws {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
-        // TODO: Implement when hives endpoint is ready
-        throw FastAPIError.serverError(501, "Hives not implemented yet")
+        let _: EmptyResponse = try await performRequest(
+            path: "/api/hives/\(hiveId)",
+            method: .delete,
+            requiresAuth: true
+        )
+    }
+
+    func joinHive(code: String) async throws {
+        guard isAuthenticated else { throw FastAPIError.unauthorized }
+        let request = JoinHivePayload(code: code)
+        let _: JoinHiveResponse = try await performRequest(
+            path: "/api/hives/join",
+            method: .post,
+            body: request,
+            requiresAuth: true
+        )
+    }
+
+    func leaveHive(hiveId: String) async throws {
+        guard isAuthenticated else { throw FastAPIError.unauthorized }
+        let _: EmptyResponse = try await performRequest(
+            path: "/api/hives/\(hiveId)/leave",
+            method: .post,
+            requiresAuth: true
+        )
+    }
+
+    func getHiveDetail(hiveId: String) async throws -> HiveDetail {
+        guard isAuthenticated else { throw FastAPIError.unauthorized }
+        let response: HiveDetailResponse = try await performRequest(
+            path: "/api/hives/\(hiveId)",
+            method: .get,
+            requiresAuth: true
+        )
+
+        return response.toDomain()
+    }
+
+    func logHiveDay(hiveId: String, value: Int) async throws -> HiveMemberDay {
+        guard isAuthenticated else { throw FastAPIError.unauthorized }
+        let request = LogHivePayload(value: value)
+        return try await performRequest(
+            path: "/api/hives/\(hiveId)/log",
+            method: .post,
+            body: request,
+            requiresAuth: true
+        )
+    }
+
+    func createHiveInvite(hiveId: String, ttlMinutes: Int = 10080, maxUses: Int = 20) async throws -> HiveInvite {
+        guard isAuthenticated else { throw FastAPIError.unauthorized }
+        let request = HiveInviteRequest(ttlMinutes: ttlMinutes, maxUses: maxUses)
+        return try await performRequest(
+            path: "/api/hives/\(hiveId)/invite",
+            method: .post,
+            body: request,
+            requiresAuth: true
+        )
     }
 
     func getActivityFeed(hiveId: String? = nil, limit: Int = 50) async throws -> [ActivityEvent] {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
-        // TODO: Implement when activity endpoint is ready
-        return []
+
+        var path = "/api/activity/feed?limit=\(limit)"
+        if let hiveId {
+            path += "&hive_id=\(hiveId)"
+        }
+
+        return try await performRequest(
+            path: path,
+            method: .get,
+            requiresAuth: true
+        )
     }
 
     // MARK: - Insights
@@ -593,7 +667,15 @@ final class FastAPIClient: ObservableObject {
 
     func uploadContacts(_ contacts: [ContactHashPayload]) async throws {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
-        // TODO: Implement contacts upload endpoint
+        guard !contacts.isEmpty else { return }
+
+        let payload = ContactUploadPayload(contacts: contacts)
+        let _: EmptyResponse = try await performRequest(
+            path: "/api/contacts/upload",
+            method: .post,
+            body: payload,
+            requiresAuth: true
+        )
     }
 
     // MARK: - Private Helpers
@@ -639,11 +721,92 @@ final class FastAPIClient: ObservableObject {
         requiresProfileSetup = needsName || needsPhone
     }
 
+    private func storeAccessToken(_ token: String?) {
+        accessTokenExpiry = token.flatMap(decodeExpirationDate(from:))
+        isAuthenticated = token != nil
+
+        if let token {
+            UserDefaults.standard.set(token, forKey: sessionStorageKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: sessionStorageKey)
+        }
+    }
+
+    private func decodeExpirationDate(from token: String) -> Date? {
+        let segments = token.split(separator: ".")
+        guard segments.count >= 2 else { return nil }
+
+        var payload = String(segments[1])
+        payload = payload
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+
+        while payload.count % 4 != 0 {
+            payload.append("=")
+        }
+
+        guard let data = Data(base64Encoded: payload) else { return nil }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+
+        if let exp = json["exp"] as? TimeInterval {
+            return Date(timeIntervalSince1970: exp)
+        }
+        if let expInt = json["exp"] as? Int {
+            return Date(timeIntervalSince1970: TimeInterval(expInt))
+        }
+        return nil
+    }
+
+    private func ensureValidAccessToken() async throws {
+        guard let token = accessToken else {
+            throw FastAPIError.unauthorized
+        }
+
+        if accessTokenExpiry == nil {
+            accessTokenExpiry = decodeExpirationDate(from: token)
+        }
+
+        if let expiry = accessTokenExpiry, expiry.timeIntervalSinceNow <= 60 {
+            try await refreshAccessToken()
+        }
+    }
+
+    private func refreshAccessToken() async throws {
+        guard let refreshToken else { throw FastAPIError.unauthorized }
+        let request = RefreshTokenRequest(refreshToken: refreshToken)
+        let response: AuthResponse = try await performRequest(
+            path: "/api/auth/refresh",
+            method: .post,
+            body: request,
+            requiresAuth: false,
+            retrying: true
+        )
+        applyAuthResponse(response)
+    }
+
+    private func attemptRefreshAfterUnauthorized() async -> Bool {
+        guard refreshToken != nil else { return false }
+        do {
+            try await refreshAccessToken()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func applyAuthResponse(_ response: AuthResponse) {
+        accessToken = response.accessToken
+        if let newRefresh = response.refreshToken {
+            refreshToken = newRefresh.isEmpty ? nil : newRefresh
+        }
+    }
+
     private func performRequest<T: Decodable>(
         path: String,
         method: HTTPMethod,
         body: Encodable? = nil,
-        requiresAuth: Bool = false
+        requiresAuth: Bool = false,
+        retrying: Bool = false
     ) async throws -> T {
 
         guard let url = URL(string: path, relativeTo: baseURL) else {
@@ -654,12 +817,14 @@ final class FastAPIClient: ObservableObject {
         request.httpMethod = method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        if requiresAuth, let token = accessToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
         if let body = body {
             request.httpBody = try encoder.encode(AnyEncodable(body))
+        }
+
+        if requiresAuth {
+            try await ensureValidAccessToken()
+            guard let token = accessToken else { throw FastAPIError.unauthorized }
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
         do {
@@ -670,7 +835,20 @@ final class FastAPIClient: ObservableObject {
             }
 
             if httpResponse.statusCode == 401 {
-                await MainActor.run { logout() }
+                if requiresAuth && !retrying {
+                    let refreshed = await attemptRefreshAfterUnauthorized()
+                    if refreshed {
+                        return try await performRequest(
+                            path: path,
+                            method: method,
+                            body: body,
+                            requiresAuth: requiresAuth,
+                            retrying: true
+                        )
+                    }
+                }
+
+                logout()
                 throw FastAPIError.unauthorized
             }
 
@@ -714,11 +892,36 @@ private struct EmptyResponse: Decodable {
     init() {}
 }
 
+private enum DateFormats {
+    static let apiDay: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+}
+
+private extension ISO8601DateFormatter {
+    static let full: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    static let withoutFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+}
+
 // Response models that match your FastAPI backend
 private struct ProfileRecord: Decodable {
     let id: String
     let displayName: String
     let avatarUrl: String?
+    let phone: String?
     let timezone: String
     let dayStartHour: Int
     let theme: String
@@ -727,6 +930,7 @@ private struct ProfileRecord: Decodable {
         case id
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
+        case phone
         case timezone
         case dayStartHour = "day_start_hour"
         case theme
@@ -812,4 +1016,246 @@ private struct HabitPerformanceResponse: Decodable {
     let name: String
     let emoji: String?
     let completion_rate: Double
+}
+
+private struct CreateHiveFromHabitPayload: Encodable {
+    let habitId: String
+    let name: String?
+    let backfillDays: Int
+
+    enum CodingKeys: String, CodingKey {
+        case habitId = "habit_id"
+        case name
+        case backfillDays = "backfill_days"
+    }
+}
+
+struct HiveUpdatePayload: Encodable {
+    var name: String?
+    var description: String?
+    var emoji: String?
+    var colorHex: String?
+    var targetPerDay: Int?
+    var rule: String?
+    var threshold: Int?
+    var scheduleDaily: Bool?
+    var scheduleWeekmask: Int?
+    var maxMembers: Int?
+    var isActive: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case description
+        case emoji
+        case colorHex = "color_hex"
+        case targetPerDay = "target_per_day"
+        case rule
+        case threshold
+        case scheduleDaily = "schedule_daily"
+        case scheduleWeekmask = "schedule_weekmask"
+        case maxMembers = "max_members"
+        case isActive = "is_active"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(emoji, forKey: .emoji)
+        try container.encodeIfPresent(colorHex, forKey: .colorHex)
+        try container.encodeIfPresent(targetPerDay, forKey: .targetPerDay)
+        try container.encodeIfPresent(rule, forKey: .rule)
+        try container.encodeIfPresent(threshold, forKey: .threshold)
+        try container.encodeIfPresent(scheduleDaily, forKey: .scheduleDaily)
+        try container.encodeIfPresent(scheduleWeekmask, forKey: .scheduleWeekmask)
+        try container.encodeIfPresent(maxMembers, forKey: .maxMembers)
+        try container.encodeIfPresent(isActive, forKey: .isActive)
+    }
+}
+
+private struct JoinHivePayload: Encodable {
+    let code: String
+}
+
+private struct LogHivePayload: Encodable {
+    let value: Int
+}
+
+private struct HiveInviteRequest: Encodable {
+    let ttlMinutes: Int
+    let maxUses: Int
+
+    enum CodingKeys: String, CodingKey {
+        case ttlMinutes = "ttl_minutes"
+        case maxUses = "max_uses"
+    }
+}
+
+private struct JoinHiveResponse: Decodable {
+    let success: Bool
+    let hiveId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case hiveId = "hive_id"
+    }
+}
+
+private struct ContactUploadPayload: Encodable {
+    let contacts: [ContactHashPayload]
+}
+
+// MARK: - Hive Detail Responses
+
+private struct HiveTodaySummaryResponse: Decodable {
+    let completed: Int
+    let partial: Int
+    let pending: Int
+    let total: Int
+    let completionRate: Double
+
+    enum CodingKeys: String, CodingKey {
+        case completed
+        case partial
+        case pending
+        case total
+        case completionRate = "completion_rate"
+    }
+}
+
+private struct HiveMemberStatusResponse: Decodable {
+    let hiveId: UUID
+    let userId: UUID
+    let role: String
+    let joinedAt: Date
+    let leftAt: Date?
+    let isActive: Bool
+    let displayName: String?
+    let avatarUrl: String?
+    let status: HiveMemberStatusState
+    let value: Int
+    let targetPerDay: Int
+
+    enum CodingKeys: String, CodingKey {
+        case hiveId = "hive_id"
+        case userId = "user_id"
+        case role
+        case joinedAt = "joined_at"
+        case leftAt = "left_at"
+        case isActive = "is_active"
+        case displayName = "display_name"
+        case avatarUrl = "avatar_url"
+        case status
+        case value
+        case targetPerDay = "target_per_day"
+    }
+}
+
+private struct HiveDetailResponse: Decodable {
+    let id: UUID
+    let name: String
+    let ownerId: UUID
+    let description: String?
+    let emoji: String?
+    let colorHex: String
+    let type: HabitTypeResponse
+    let targetPerDay: Int
+    let rule: String
+    let threshold: Int?
+    let scheduleDaily: Bool
+    let scheduleWeekmask: Int
+    let isActive: Bool
+    let inviteCode: String?
+    let maxMembers: Int?
+    let currentLength: Int?
+    let currentStreak: Int?
+    let longestStreak: Int?
+    let lastAdvancedOn: Date?
+    let createdAt: Date
+    let updatedAt: Date?
+    let memberCount: Int?
+    let avgCompletion: Double
+    let todaySummary: HiveTodaySummaryResponse
+    let members: [HiveMemberStatusResponse]
+    let recentActivity: [ActivityEvent]?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case ownerId = "owner_id"
+        case description
+        case emoji
+        case colorHex = "color_hex"
+        case type
+        case targetPerDay = "target_per_day"
+        case rule
+        case threshold
+        case scheduleDaily = "schedule_daily"
+        case scheduleWeekmask = "schedule_weekmask"
+        case isActive = "is_active"
+        case inviteCode = "invite_code"
+        case maxMembers = "max_members"
+        case currentLength = "current_length"
+        case currentStreak = "current_streak"
+        case longestStreak = "longest_streak"
+        case lastAdvancedOn = "last_advanced_on"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case memberCount = "member_count"
+        case avgCompletion = "avg_completion"
+        case todaySummary = "today_summary"
+        case members
+        case recentActivity = "recent_activity"
+    }
+
+    func toDomain() -> HiveDetail {
+        HiveDetail(
+            id: id.uuidString,
+            name: name,
+            ownerId: ownerId.uuidString,
+            description: description,
+            emoji: emoji,
+            colorHex: colorHex,
+            type: HabitType(rawValue: type.rawValue) ?? .checkbox,
+            targetPerDay: targetPerDay,
+            rule: rule,
+            threshold: threshold,
+            scheduleDaily: scheduleDaily,
+            scheduleWeekmask: scheduleWeekmask,
+            isActive: isActive,
+            inviteCode: inviteCode,
+            maxMembers: maxMembers,
+            currentLength: currentLength,
+            currentStreak: currentStreak,
+            longestStreak: longestStreak,
+            lastAdvancedOn: lastAdvancedOn.map { ISO8601DateFormatter().string(from: $0) },
+            createdAt: createdAt,
+            updatedAt: updatedAt ?? createdAt,
+            memberCount: memberCount,
+            avgCompletion: avgCompletion,
+            todaySummary: HiveTodaySummary(
+                completed: todaySummary.completed,
+                partial: todaySummary.partial,
+                pending: todaySummary.pending,
+                total: todaySummary.total,
+                completionRate: todaySummary.completionRate
+            ),
+            members: members.map { response in
+                HiveMemberStatus(
+                    hiveId: response.hiveId.uuidString,
+                    userId: response.userId.uuidString,
+                    role: response.role,
+                    joinedAt: response.joinedAt,
+                    leftAt: response.leftAt,
+                    isActive: response.isActive,
+                    displayName: response.displayName,
+                    avatarUrl: response.avatarUrl,
+                    status: response.status,
+                    value: response.value,
+                    targetPerDay: response.targetPerDay
+                )
+            },
+            recentActivity: recentActivity ?? []
+        )
+    }
 }
