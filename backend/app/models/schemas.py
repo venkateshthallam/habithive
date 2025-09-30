@@ -314,3 +314,19 @@ class InsightsResponse(BaseModel):
 class InsightsDashboardResponse(BaseModel):
     ranges: Dict[str, InsightsRangeStats]
     year_overview: Dict[str, int]
+
+
+class HabitHeatmapSeries(BaseModel):
+    habit_id: UUID
+    name: str
+    emoji: Optional[str] = None
+    color_hex: str
+    counts: Dict[str, int]
+
+
+class YearOverviewResponse(BaseModel):
+    start_date: date
+    end_date: date
+    totals: Dict[str, int]
+    max_total: int = 0
+    habits: List[HabitHeatmapSeries] = []

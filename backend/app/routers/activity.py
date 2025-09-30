@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
-from app.models.schemas import ActivityEvent
+from app.models.schemas import ActivityEvent, YearOverviewResponse, HabitHeatmapSeries
 from app.core.auth import get_current_user
 from app.core.supabase import get_user_supabase_client
 from app.core.config import settings
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import uuid
 
 router = APIRouter()
@@ -116,6 +116,125 @@ async def get_activity_feed(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch activity feed: {str(e)}"
+        )
+
+
+@router.get("/year-overview", response_model=YearOverviewResponse)
+async def get_year_overview(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    year: Optional[int] = Query(None, ge=2000, le=3000, description="Calendar year to summarise")
+):
+    """Return per-day completion counts for the selected year."""
+    user_id = current_user["id"]
+
+    today = date.today()
+    target_year = year or today.year
+    start_date = date(target_year, 1, 1)
+    end_date = date(target_year, 12, 31)
+
+    def build_response(habits: List[Dict[str, Any]], logs: List[Dict[str, Any]]) -> YearOverviewResponse:
+        active_habits = [h for h in habits if h.get("is_active", True)]
+        habit_map: Dict[str, Dict[str, Any]] = {}
+        for habit in active_habits:
+            hid = str(habit["id"])
+            habit_map[hid] = habit
+
+        totals: Dict[str, int] = {}
+        per_habit: Dict[str, Dict[str, int]] = {}
+
+        for entry in logs:
+            hid = str(entry.get("habit_id"))
+            habit = habit_map.get(hid)
+            if habit is None:
+                continue
+
+            raw_date = entry.get("log_date")
+            if isinstance(raw_date, str):
+                log_date = date.fromisoformat(raw_date)
+            elif isinstance(raw_date, datetime):
+                log_date = raw_date.date()
+            else:
+                log_date = raw_date
+
+            if log_date is None or log_date < start_date or log_date > end_date:
+                continue
+
+            target = int(habit.get("target_per_day") or 1)
+            value = int(entry.get("value", 0) or 0)
+            normalized = max(0, min(value, target if target > 0 else value))
+            if normalized == 0:
+                continue
+
+            key = log_date.isoformat()
+            totals[key] = totals.get(key, 0) + normalized
+            habit_bucket = per_habit.setdefault(hid, {})
+            habit_bucket[key] = habit_bucket.get(key, 0) + normalized
+
+        series: List[HabitHeatmapSeries] = []
+        for hid, habit in habit_map.items():
+            counts = per_habit.get(hid, {})
+            series.append(
+                HabitHeatmapSeries(
+                    habit_id=uuid.UUID(str(hid)),
+                    name=habit.get("name", ""),
+                    emoji=habit.get("emoji"),
+                    color_hex=habit.get("color_hex", "#FF9F1C"),
+                    counts=counts,
+                )
+            )
+
+        series.sort(key=lambda item: item.name.lower())
+
+        max_total = max(totals.values(), default=0)
+
+        return YearOverviewResponse(
+            start_date=start_date,
+            end_date=end_date,
+            totals=totals,
+            max_total=max_total,
+            habits=series,
+        )
+
+    if settings.TEST_MODE:
+        test_habits = list(get_test_habits().values())
+        test_logs = list(get_test_logs().values())
+
+        filtered_logs = []
+        for log in test_logs:
+            if log.get("user_id") != user_id:
+                continue
+            filtered_logs.append(log)
+
+        return build_response(test_habits, filtered_logs)
+
+    try:
+        supabase = get_user_supabase_client(current_user)
+
+        habits_response = (
+            supabase
+            .table("habits")
+            .select("id, name, emoji, color_hex, target_per_day, type, is_active")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        habit_rows = habits_response.data or []
+
+        logs_response = (
+            supabase
+            .table("habit_logs")
+            .select("habit_id, log_date, value")
+            .eq("user_id", user_id)
+            .gte("log_date", start_date.isoformat())
+            .lte("log_date", end_date.isoformat())
+            .execute()
+        )
+        log_rows = logs_response.data or []
+
+        return build_response(habit_rows, log_rows)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to build year overview: {str(e)}"
         )
 
 @router.post("/", response_model=ActivityEvent)

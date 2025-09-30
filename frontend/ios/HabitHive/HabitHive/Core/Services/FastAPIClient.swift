@@ -590,15 +590,17 @@ final class FastAPIClient: ObservableObject {
         )
     }
 
-    func joinHive(code: String) async throws {
+    func joinHive(code: String) async throws -> HiveJoinResult {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
         let request = JoinHivePayload(code: code)
-        let _: JoinHiveResponse = try await performRequest(
+        let response: JoinHiveResponse = try await performRequest(
             path: "/api/hives/join",
             method: .post,
             body: request,
             requiresAuth: true
         )
+
+        return HiveJoinResult(success: response.success, hiveId: response.hiveId, message: response.message)
     }
 
     func leaveHive(hiveId: String) async throws {
@@ -698,6 +700,20 @@ final class FastAPIClient: ObservableObject {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
         return try await performRequest(
             path: "/api/habits/insights/dashboard",
+            method: .get,
+            requiresAuth: true
+        )
+    }
+
+    func getYearOverview(year: Int? = nil) async throws -> YearOverviewModel {
+        guard isAuthenticated else { throw FastAPIError.unauthorized }
+        var path = "/api/activity/year-overview"
+        if let year {
+            path += "?year=\(year)"
+        }
+
+        return try await performRequest(
+            path: path,
             method: .get,
             requiresAuth: true
         )
@@ -1253,10 +1269,12 @@ private struct HiveInviteRequest: Encodable {
 private struct JoinHiveResponse: Decodable {
     let success: Bool
     let hiveId: String?
+    let message: String?
 
     enum CodingKeys: String, CodingKey {
         case success
         case hiveId = "hive_id"
+        case message
     }
 }
 

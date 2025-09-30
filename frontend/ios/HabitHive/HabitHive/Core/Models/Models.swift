@@ -635,6 +635,46 @@ struct InsightsDashboard: Codable {
     }
 }
 
+struct HabitHeatmapSeriesModel: Codable, Identifiable {
+    let habitId: String
+    let name: String
+    let emoji: String?
+    let colorHex: String
+    let counts: [String: Int]
+
+    var id: String { habitId }
+
+    enum CodingKeys: String, CodingKey {
+        case habitId = "habit_id"
+        case name
+        case emoji
+        case colorHex = "color_hex"
+        case counts
+    }
+}
+
+struct YearOverviewModel: Codable {
+    let startDate: Date
+    let endDate: Date
+    let totals: [String: Int]
+    let maxTotal: Int
+    let habits: [HabitHeatmapSeriesModel]
+
+    enum CodingKeys: String, CodingKey {
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case totals
+        case maxTotal = "max_total"
+        case habits
+    }
+}
+
 struct JoinHiveRequest: Codable {
     let code: String
+}
+
+struct HiveJoinResult {
+    let success: Bool
+    let hiveId: String?
+    let message: String?
 }

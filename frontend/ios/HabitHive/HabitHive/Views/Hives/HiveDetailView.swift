@@ -12,7 +12,10 @@ struct HiveDetailView: View {
 
     @State private var shareContent: ShareContent?
     @State private var showDeleteAlert = false
+    @State private var showLeaveAlert = false
     @State private var logConfirmation: String?
+    @State private var toastMessage: String?
+    @State private var isErrorToast = false
 
     var body: some View {
         ZStack {
@@ -29,6 +32,8 @@ struct HiveDetailView: View {
 
                         if viewModel.isOwner {
                             deleteCard
+                        } else {
+                            leaveCard
                         }
                     }
                     .padding(.horizontal, HiveSpacing.lg)
@@ -71,9 +76,21 @@ struct HiveDetailView: View {
                     viewModel.deleteHive(hiveId: hive.id)
                 }
             }
+            .disabled(viewModel.isDeleting)
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This will remove the hive for everyone. This action cannot be undone.")
+        }
+        .alert("Leave Hive?", isPresented: $showLeaveAlert) {
+            Button("Leave", role: .destructive) {
+                if let hive = viewModel.hive {
+                    viewModel.leaveHive(hiveId: hive.id)
+                }
+            }
+            .disabled(viewModel.isLeaving)
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("You will no longer be a member of this hive.")
         }
         .onReceive(viewModel.$latestInviteCode.compactMap { $0 }) { code in
             shareContent = ShareContent(text: "Join my HabitHive group! Use code: \(code)")
@@ -82,7 +99,36 @@ struct HiveDetailView: View {
             logConfirmation = message
         }
         .onReceive(viewModel.$didDelete.filter { $0 }) { _ in
-            dismiss()
+            toastMessage = "Hive deleted successfully"
+            isErrorToast = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                dismiss()
+            }
+        }
+        .onReceive(viewModel.$didLeave.filter { $0 }) { _ in
+            toastMessage = "Left hive successfully"
+            isErrorToast = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                dismiss()
+            }
+        }
+        .onReceive(viewModel.$errorMessage.compactMap { $0 }) { error in
+            toastMessage = error
+            isErrorToast = true
+        }
+        .overlay(alignment: .top) {
+            if let message = toastMessage {
+                ToastView(message: message, isError: isErrorToast)
+                    .padding(.top, 50)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            withAnimation {
+                                toastMessage = nil
+                            }
+                        }
+                    }
+            }
         }
         .onAppear { viewModel.load(hiveId: hiveId) }
     }
@@ -295,17 +341,70 @@ struct HiveDetailView: View {
             Button {
                 showDeleteAlert = true
             } label: {
-                Text("Delete Hive")
-                    .font(HiveTypography.body)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, HiveSpacing.sm)
-                    .background(
-                        RoundedRectangle(cornerRadius: HiveRadius.large)
-                            .fill(HiveColors.error)
-                    )
+                HStack(spacing: HiveSpacing.sm) {
+                    if viewModel.isDeleting {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                    }
+                    Text(viewModel.isDeleting ? "Deleting…" : "Delete Hive")
+                        .font(HiveTypography.body)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, HiveSpacing.sm)
+                .background(
+                    RoundedRectangle(cornerRadius: HiveRadius.large)
+                        .fill(HiveColors.error)
+                )
             }
+            .disabled(viewModel.isDeleting)
+            .opacity(viewModel.isDeleting ? 0.7 : 1)
+        }
+        .padding(HiveSpacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 10, x: 0, y: 6)
+        )
+    }
+
+    private var leaveCard: some View {
+        let theme = themeManager.currentTheme
+        return VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+            Text("Leave Hive")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(theme.primaryTextColor)
+
+            Text("You will no longer be a member of this hive.")
+                .font(HiveTypography.caption)
+                .foregroundColor(theme.secondaryTextColor)
+
+            Button {
+                showLeaveAlert = true
+            } label: {
+                HStack(spacing: HiveSpacing.sm) {
+                    if viewModel.isLeaving {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                    }
+                    Text(viewModel.isLeaving ? "Leaving…" : "Leave Hive")
+                        .font(HiveTypography.body)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, HiveSpacing.sm)
+                .background(
+                    RoundedRectangle(cornerRadius: HiveRadius.large)
+                        .fill(HiveColors.warning)
+                )
+            }
+            .disabled(viewModel.isLeaving)
+            .opacity(viewModel.isLeaving ? 0.7 : 1)
         }
         .padding(HiveSpacing.lg)
         .background(
@@ -345,6 +444,7 @@ struct HiveDetailView: View {
     private func memberRow(member: HiveMemberStatus) -> some View {
         let theme = themeManager.currentTheme
         let isCurrentUser = member.userId == FastAPIClient.shared.currentUser?.id
+        let isOwner = viewModel.hive?.ownerId == member.userId
 
         let style: (String, Color) = {
             switch member.status {
@@ -360,10 +460,18 @@ struct HiveDetailView: View {
                 .frame(width: 12, height: 12)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(member.displayName ?? "Bee")
-                    .font(HiveTypography.body)
-                    .fontWeight(isCurrentUser ? .semibold : .regular)
-                    .foregroundColor(theme.primaryTextColor)
+                HStack(spacing: HiveSpacing.xs) {
+                    Text(member.displayName ?? "Bee")
+                        .font(HiveTypography.body)
+                        .fontWeight(isCurrentUser ? .semibold : .regular)
+                        .foregroundColor(theme.primaryTextColor)
+
+                    if isOwner {
+                        Text("• Owner")
+                            .font(HiveTypography.caption)
+                            .foregroundColor(HiveColors.honeyGradientEnd)
+                    }
+                }
 
                 Text(style.0)
                     .font(HiveTypography.caption)
@@ -446,6 +554,31 @@ private struct ActivityView: UIViewControllerRepresentable {
 }
 #endif
 
+private struct ToastView: View {
+    let message: String
+    let isError: Bool
+    @StateObject private var themeManager = ThemeManager.shared
+
+    var body: some View {
+        HStack(spacing: HiveSpacing.sm) {
+            Image(systemName: isError ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                .foregroundColor(isError ? HiveColors.error : HiveColors.mintSuccess)
+
+            Text(message)
+                .font(HiveTypography.body)
+                .foregroundColor(themeManager.currentTheme.primaryTextColor)
+        }
+        .padding(.horizontal, HiveSpacing.lg)
+        .padding(.vertical, HiveSpacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.medium)
+                .fill(themeManager.currentTheme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, HiveSpacing.lg)
+    }
+}
+
 @MainActor
 class HiveDetailViewModel: ObservableObject {
     @Published var hive: HiveDetail?
@@ -454,12 +587,20 @@ class HiveDetailViewModel: ObservableObject {
     @Published var latestInviteCode: String?
     @Published var logConfirmationMessage: String?
     @Published var didDelete = false
+    @Published var isDeleting = false
+    @Published var didLeave = false
+    @Published var isLeaving = false
 
     private let api = FastAPIClient.shared
 
     var isOwner: Bool {
-        guard let hive, let me = api.currentUser?.id else { return false }
-        return hive.ownerId == me
+        guard let hive, let me = api.currentUser?.id else {
+            print("DEBUG: isOwner - No hive or currentUser")
+            return false
+        }
+        let result = hive.ownerId == me
+        print("DEBUG: isOwner - hiveOwnerId: \(hive.ownerId), currentUserId: \(me), match: \(result)")
+        return result
     }
 
     func hasCompletedToday(hive: HiveDetail) -> Bool {
@@ -504,11 +645,36 @@ class HiveDetailViewModel: ObservableObject {
 
     func deleteHive(hiveId: String) {
         Task {
+            await MainActor.run { self.isDeleting = true }
             do {
                 try await api.deleteHive(hiveId: hiveId)
-                await MainActor.run { self.didDelete = true }
+                await MainActor.run {
+                    self.isDeleting = false
+                    self.didDelete = true
+                }
             } catch {
-                await MainActor.run { self.errorMessage = error.localizedDescription }
+                await MainActor.run {
+                    self.isDeleting = false
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func leaveHive(hiveId: String) {
+        Task {
+            await MainActor.run { self.isLeaving = true }
+            do {
+                try await api.leaveHive(hiveId: hiveId)
+                await MainActor.run {
+                    self.isLeaving = false
+                    self.didLeave = true
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLeaving = false
+                    self.errorMessage = error.localizedDescription
+                }
             }
         }
     }

@@ -42,7 +42,6 @@ struct HivesView: View {
     @StateObject private var viewModel = HivesViewModel()
     @State private var showCreateHive = false
     @State private var showJoinHive = false
-    @State private var joinCode = ""
 
     private var backgroundColor: Color {
         themeManager.currentTheme == .night ? themeManager.currentTheme.backgroundColor : HiveColors.creamBase
@@ -87,18 +86,12 @@ struct HivesView: View {
             .onAppear {
                 viewModel.loadHives()
             }
-            .alert("Join Hive", isPresented: $showJoinHive) {
-                TextField("Enter invite code", text: $joinCode)
-                    .textInputAutocapitalization(.characters)
-                Button("Join") {
-                    viewModel.joinHive(code: joinCode)
-                    joinCode = ""
-                }
-                Button("Cancel", role: .cancel) {
-                    joinCode = ""
-                }
-            } message: {
-                Text("Enter the invite code to join a hive")
+            .sheet(isPresented: $showJoinHive, onDismiss: {
+                viewModel.resetJoinStatus()
+            }) {
+                JoinHiveSheet(viewModel: viewModel)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showCreateHive) {
                 CreateHiveFromHabitView { _ in
@@ -137,7 +130,14 @@ struct HivesView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(HiveColors.beeBlack)
 
-            YearHeatmapView(data: viewModel.yearComb, theme: themeManager.currentTheme)
+            YearHeatmapView(
+                startDate: Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date(),
+                endDate: Date(),
+                data: viewModel.yearComb,
+                maxValue: viewModel.yearComb.values.max() ?? 1,
+                accentColor: HiveColors.honeyGradientStart,
+                theme: themeManager.currentTheme
+            )
         }
         .padding(HiveSpacing.lg)
         .background(
@@ -568,6 +568,14 @@ struct LeaderRow: View {
 }
 
 // MARK: - Hives View Model
+
+enum HiveJoinStatus: Equatable {
+    case idle
+    case joining
+    case success(message: String)
+    case failure(message: String)
+}
+
 class HivesViewModel: ObservableObject {
     @Published var hives: [Hive] = []
     @Published var leaderboard: [HiveLeaderboardEntry] = []
@@ -579,6 +587,7 @@ class HivesViewModel: ObservableObject {
     @Published var currentStreaks: [HabitStreakDisplay] = []
     @Published var yearComb: [String: Int] = [:]
     @Published var bestPerformer: HabitPerformanceSummary?
+    @Published var joinStatus: HiveJoinStatus = .idle
 
     private let apiClient = FastAPIClient.shared
     private var lastLoadedAt: Date?
@@ -588,15 +597,30 @@ class HivesViewModel: ObservableObject {
         Task { await loadHivesAsync(force: false) }
     }
 
-    func joinHive(code: String) {
-        Task {
-            do {
-                try await apiClient.joinHive(code: code)
-                await loadHivesAsync(force: true)
-            } catch {
-                await MainActor.run { self.errorMessage = error.localizedDescription }
-            }
+    @MainActor
+    func joinHive(code: String) async {
+        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+
+        guard !normalized.isEmpty else {
+            joinStatus = .failure(message: "Enter an invite code to continue.")
+            return
         }
+
+        joinStatus = .joining
+
+        do {
+            let result = try await apiClient.joinHive(code: normalized)
+            await loadHivesAsync(force: true)
+            let message = result.message ?? "You're in the hive!"
+            joinStatus = .success(message: message)
+        } catch {
+            joinStatus = .failure(message: humanReadableMessage(for: error))
+        }
+    }
+
+    @MainActor
+    func resetJoinStatus() {
+        joinStatus = .idle
     }
 
     func refreshHives() async {
@@ -643,6 +667,34 @@ class HivesViewModel: ObservableObject {
         yearComb = summary.yearComb
         bestPerformer = summary.bestPerforming
     }
+
+    private func humanReadableMessage(for error: Error) -> String {
+        if let fastError = error as? FastAPIError {
+            switch fastError {
+            case .networkError(let message):
+                return message
+            case .serverError(_, let payload):
+                if let data = payload.data(using: .utf8),
+                   let decoded = try? JSONDecoder().decode(ServerErrorMessage.self, from: data),
+                   let detail = decoded.detail {
+                    return detail
+                }
+                if let data = payload.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let detail = json["detail"] as? String {
+                    return detail
+                }
+                return payload
+            default:
+                return fastError.errorDescription ?? "Something went wrong."
+            }
+        }
+        return error.localizedDescription
+    }
+
+    private struct ServerErrorMessage: Decodable {
+        let detail: String?
+    }
 }
 
 // MARK: - Insights View
@@ -659,8 +711,17 @@ struct InsightsView: View {
 
                 insightsContent
             }
-            .navigationTitle("Insights")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Insights")
+                        .font(HiveTypography.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                }
+            }
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(themeManager.currentTheme.backgroundColor.opacity(0.95), for: .navigationBar)
+            .toolbarColorScheme(themeManager.currentTheme == .night ? .dark : .light, for: .navigationBar)
         }
         .onAppear {
             viewModel.loadInsights()
@@ -717,12 +778,16 @@ struct InsightsView: View {
     }
 
     private var rangePicker: some View {
-        Picker("Range", selection: $viewModel.selectedRange) {
+        let theme = themeManager.currentTheme
+        return Picker("Range", selection: $viewModel.selectedRange) {
             ForEach(InsightRange.allCases, id: \.self) { range in
                 Text(range.displayName).tag(range)
             }
         }
         .pickerStyle(.segmented)
+        .background(theme.cardBackgroundColor)
+        .cornerRadius(HiveRadius.medium)
+        .tint(HiveColors.honeyGradientEnd)
     }
 
     private var statsCards: some View {
@@ -763,12 +828,73 @@ struct InsightsView: View {
                     .fontWeight(.semibold)
                     .foregroundColor(themeManager.currentTheme.primaryTextColor)
                 Spacer()
-                Label("All Habits", systemImage: "chevron.down")
-                    .font(HiveTypography.caption)
-                    .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+
+                if !viewModel.heatmapFilters.isEmpty {
+                    let selected = viewModel.heatmapFilters.first(where: { $0.id == viewModel.selectedHeatmapFilterID })
+                    Menu {
+                        ForEach(viewModel.heatmapFilters) { option in
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    viewModel.selectedHeatmapFilterID = option.id
+                                }
+                            } label: {
+                                HStack {
+                                    if let emoji = option.emoji {
+                                        Text(emoji)
+                                    }
+                                    Text(option.title)
+                                    if option.id == viewModel.selectedHeatmapFilterID {
+                                        Spacer()
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: HiveSpacing.xs) {
+                            if let emoji = selected?.emoji {
+                                Text(emoji)
+                            }
+                            Text(selected?.title ?? "All Habits")
+                                .font(HiveTypography.caption)
+                                .fontWeight(.semibold)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .padding(.horizontal, HiveSpacing.sm)
+                        .padding(.vertical, HiveSpacing.xs)
+                        .background(
+                            Capsule()
+                                .fill(themeManager.currentTheme == .night ? Color.white.opacity(0.08) : Color.white.opacity(0.65))
+                        )
+                    }
+                    .disabled(viewModel.heatmapFilters.count <= 1)
+                }
             }
 
-            YearHeatmapView(data: viewModel.yearOverview, theme: themeManager.currentTheme)
+            if let overview = viewModel.yearOverview {
+                YearHeatmapView(
+                    startDate: overview.startDate,
+                    endDate: overview.endDate,
+                    data: viewModel.selectedHeatmapData,
+                    maxValue: viewModel.selectedHeatmapMaxValue,
+                    accentColor: viewModel.selectedHeatmapAccent,
+                    theme: themeManager.currentTheme
+                )
+            } else if viewModel.isLoading {
+                HStack(spacing: HiveSpacing.sm) {
+                    ProgressView()
+                    Text("Building comb view…")
+                        .font(HiveTypography.caption)
+                        .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text("No check-ins logged for this year yet.")
+                    .font(HiveTypography.caption)
+                    .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(HiveSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -895,6 +1021,9 @@ class InsightsViewModel: ObservableObject {
     @Published var selectedRange: InsightRange = .week
     @Published var isLoading = false
     @Published var errorMessage = ""
+    @Published var yearOverview: YearOverviewModel?
+    @Published var heatmapFilters: [HeatmapFilterOption] = []
+    @Published var selectedHeatmapFilterID: String = HeatmapFilterOption.allID
 
     private let apiClient = FastAPIClient.shared
     private var lastLoadedAt: Date?
@@ -920,9 +1049,14 @@ class InsightsViewModel: ObservableObject {
         isLoading = true
 
         do {
-            let dashboard = try await apiClient.getInsightsDashboard()
+            async let dashboardTask = apiClient.getInsightsDashboard()
+            async let overviewTask = apiClient.getYearOverview()
+
+            let (dashboard, overview) = try await (dashboardTask, overviewTask)
             self.dashboard = dashboard
+            applyYearOverview(overview)
             lastLoadedAt = Date()
+            errorMessage = ""
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -935,8 +1069,52 @@ class InsightsViewModel: ObservableObject {
         return dashboard.stats(for: selectedRange)
     }
 
-    var yearOverview: [String: Int] {
-        dashboard?.yearOverview ?? [:]
+    var selectedHeatmapData: [String: Int] {
+        guard let option = heatmapFilters.first(where: { $0.id == selectedHeatmapFilterID }) else {
+            return [:]
+        }
+        return option.counts
+    }
+
+    var selectedHeatmapMaxValue: Int {
+        heatmapFilters.first(where: { $0.id == selectedHeatmapFilterID })?.maxValue ?? 0
+    }
+
+    var selectedHeatmapAccent: Color {
+        heatmapFilters.first(where: { $0.id == selectedHeatmapFilterID })?.accentColor ?? HiveColors.honeyGradientEnd
+    }
+
+    private func applyYearOverview(_ overview: YearOverviewModel) {
+        yearOverview = overview
+
+        var filters: [HeatmapFilterOption] = [HeatmapFilterOption(
+            id: HeatmapFilterOption.allID,
+            title: "All Habits",
+            emoji: nil,
+            counts: overview.totals,
+            maxValue: max(overview.maxTotal, 0),
+            accentHex: nil
+        )]
+
+        for habit in overview.habits {
+            let maxValue = habit.counts.values.max() ?? 0
+            filters.append(
+                HeatmapFilterOption(
+                    id: habit.id,
+                    title: habit.name,
+                    emoji: habit.emoji,
+                    counts: habit.counts,
+                    maxValue: maxValue,
+                    accentHex: habit.colorHex
+                )
+            )
+        }
+
+        heatmapFilters = filters
+
+        if !filters.contains(where: { $0.id == selectedHeatmapFilterID }) {
+            selectedHeatmapFilterID = filters.first?.id ?? HeatmapFilterOption.allID
+        }
     }
 }
 
@@ -1193,19 +1371,6 @@ var body: some View {
                                 .background(themeManager.currentTheme.secondaryTextColor.opacity(0.15))
 
                             SettingsRow(
-                                icon: "moon",
-                                title: "Theme",
-                                value: themeManager.currentTheme.rawValue.capitalized,
-                                action: {
-                                    viewModel.showThemeSelector = true
-                                },
-                                theme: themeManager.currentTheme
-                            )
-
-                            Divider()
-                                .background(themeManager.currentTheme.secondaryTextColor.opacity(0.15))
-
-                            SettingsRow(
                                 icon: "clock",
                                 title: "Day Start Time",
                                 value: viewModel.dayStartTime,
@@ -1279,23 +1444,6 @@ var body: some View {
             .navigationBarTitle("Profile", displayMode: .inline)
             .onAppear {
                 viewModel.loadProfile()
-            }
-            .actionSheet(isPresented: $viewModel.showThemeSelector) {
-                ActionSheet(
-                    title: Text("Choose Theme"),
-                    buttons: [
-                        .default(Text("Honey")) {
-                            themeManager.setTheme(.honey)
-                        },
-                        .default(Text("Mint")) {
-                            themeManager.setTheme(.mint)
-                        },
-                        .default(Text("Night")) {
-                            themeManager.setTheme(.night)
-                        },
-                        .cancel()
-                    ]
-                )
             }
             .sheet(isPresented: $viewModel.showTimeSelector) {
                 NavigationStack {
@@ -1411,7 +1559,6 @@ class ProfileViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var notificationsEnabled = true
     @Published var dayStartHour = 4
-    @Published var showThemeSelector = false
     @Published var showTimeSelector = false
     @Published var selectedStartTime = Date()
     @Published var showDeleteConfirmation = false
@@ -1556,16 +1703,406 @@ class CreateHiveViewModel: ObservableObject {
 }
 
 // MARK: - Year Heatmap View
+struct HeatmapFilterOption: Identifiable, Hashable {
+    static let allID = "all"
+
+    let id: String
+    let title: String
+    let emoji: String?
+    let counts: [String: Int]
+    let maxValue: Int
+    let accentHex: String?
+
+    var accentColor: Color {
+        guard let hex = accentHex else { return HiveColors.honeyGradientEnd }
+        return Color(hex: hex)
+    }
+}
+
 struct YearHeatmapView: View {
+    let startDate: Date
+    let endDate: Date
     let data: [String: Int]
+    let maxValue: Int
+    let accentColor: Color
+    let theme: AppTheme
+
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.firstWeekday = 1 // Sunday
+        return calendar
+    }
+
+    private var monthFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM"
+        return formatter
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    private var weeks: [[Date]] {
+        let calendar = calendar
+        let start = calendar.startOfWeek(for: startDate)
+        guard let paddedEnd = calendar.date(byAdding: .day, value: 6, to: endDate) else {
+            return []
+        }
+
+        let totalDays = calendar.dateComponents([.day], from: start, to: paddedEnd).day ?? 0
+        var days: [Date] = []
+
+        for offset in 0...totalDays {
+            if let day = calendar.date(byAdding: .day, value: offset, to: start) {
+                days.append(day)
+            }
+        }
+
+        var result: [[Date]] = []
+        var index = 0
+        while index < days.count {
+            let endIndex = min(index + 7, days.count)
+            var week = Array(days[index..<endIndex])
+            if week.count < 7, let last = week.last {
+                while week.count < 7, let next = calendar.date(byAdding: .day, value: 1, to: week.last ?? last) {
+                    week.append(next)
+                }
+            }
+            result.append(week)
+            index += 7
+        }
+
+        return result
+    }
+
+    private var monthLabels: [String] {
+        var labels: [String] = []
+        var currentMonth: Int?
+        let calendar = calendar
+        let formatter = monthFormatter
+
+        for week in weeks {
+            let validDays = week.filter { $0 >= startDate && $0 <= endDate }
+            guard let reference = validDays.first else {
+                labels.append(" ")
+                continue
+            }
+
+            let month = calendar.component(.month, from: reference)
+            if month != currentMonth {
+                labels.append(formatter.string(from: reference))
+                currentMonth = month
+            } else {
+                labels.append(" ")
+            }
+        }
+
+        return labels
+    }
+
+    private var emptyColor: Color {
+        theme == .night ? Color.white.opacity(0.1) : HiveColors.borderColor.opacity(0.25)
+    }
+
+    private func cellColor(for value: Int) -> Color {
+        guard value > 0, maxValue > 0 else { return emptyColor }
+        let ratio = min(Double(value) / Double(maxValue), 1.0)
+        let minOpacity = theme == .night ? 0.25 : 0.35
+        let maxOpacity = theme == .night ? 0.9 : 0.95
+        let opacity = minOpacity + (maxOpacity - minOpacity) * ratio
+        return accentColor.opacity(opacity)
+    }
+
+    private func value(for date: Date) -> Int {
+        let key = Self.dayFormatter.string(from: date)
+        return data[key, default: 0]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                let labels = monthLabels
+                LazyHStack(alignment: .top, spacing: 4) {
+                    ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
+                        VStack(spacing: 4) {
+                            Text(labels[index])
+                                .font(HiveTypography.caption2)
+                                .foregroundColor(theme.secondaryTextColor)
+                                .frame(height: 12)
+
+                            VStack(spacing: 4) {
+                                ForEach(0..<7, id: \.self) { row in
+                                    let day = week[row]
+                                    HeatmapCell(
+                                        value: value(for: day),
+                                        color: cellColor(for: value(for: day)),
+                                        theme: theme
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+
+            if maxValue > 0 {
+                HeatmapLegend(accent: accentColor, theme: theme)
+            }
+        }
+    }
+}
+
+private struct HeatmapCell: View {
+    let value: Int
+    let color: Color
     let theme: AppTheme
 
     var body: some View {
-        Text("Comb view coming soon")
-            .font(HiveTypography.body)
-            .foregroundColor(theme.secondaryTextColor)
+        RoundedRectangle(cornerRadius: 3)
+            .fill(color)
+            .frame(width: 14, height: 14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(theme == .night ? Color.white.opacity(0.05) : Color.black.opacity(0.03), lineWidth: 0.5)
+            )
+            .accessibilityLabel("\(value) completions")
     }
 }
+
+private struct HeatmapLegend: View {
+    let accent: Color
+    let theme: AppTheme
+
+    var body: some View {
+        HStack(spacing: HiveSpacing.sm) {
+            Text("Less")
+                .font(HiveTypography.caption2)
+                .foregroundColor(theme.secondaryTextColor)
+
+            LinearGradient(
+                colors: [accent.opacity(theme == .night ? 0.25 : 0.35), accent.opacity(theme == .night ? 0.9 : 0.95)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: 80, height: 8)
+            .clipShape(Capsule())
+
+            Text("More")
+                .font(HiveTypography.caption2)
+                .foregroundColor(theme.secondaryTextColor)
+        }
+    }
+}
+
+// MARK: - Join Hive Sheet
+
+struct JoinHiveSheet: View {
+    @ObservedObject var viewModel: HivesViewModel
+    @StateObject private var themeManager = ThemeManager.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var inviteCode: String = ""
+    @State private var showSuccessState = false
+    @State private var successMessage = ""
+    @FocusState private var isFocused: Bool
+
+    private var isJoining: Bool {
+        if case .joining = viewModel.joinStatus { return true }
+        return false
+    }
+
+    private var errorMessage: String? {
+        if case .failure(let message) = viewModel.joinStatus { return message }
+        return nil
+    }
+
+    var body: some View {
+        ZStack {
+            sheetContent
+                .blur(radius: showSuccessState ? 6 : 0)
+                .allowsHitTesting(!showSuccessState)
+
+            if showSuccessState {
+                successView
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .interactiveDismissDisabled(isJoining)
+        .background(themeManager.currentTheme.backgroundColor.ignoresSafeArea())
+        .onAppear {
+            inviteCode = ""
+            viewModel.resetJoinStatus()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                isFocused = true
+            }
+        }
+        .onChange(of: viewModel.joinStatus) { status in
+            switch status {
+            case .success(let message):
+                successMessage = message
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    showSuccessState = true
+                }
+#if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+#endif
+                Task {
+                    try? await Task.sleep(nanoseconds: 900_000_000)
+                    dismiss()
+                    await MainActor.run {
+                        viewModel.resetJoinStatus()
+                        showSuccessState = false
+                    }
+                }
+            case .failure:
+#if canImport(UIKit)
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+#endif
+            default:
+                break
+            }
+        }
+    }
+
+    private var sheetContent: some View {
+        VStack(spacing: HiveSpacing.lg) {
+            Capsule()
+                .fill(themeManager.currentTheme.secondaryTextColor.opacity(0.2))
+                .frame(width: 40, height: 5)
+                .padding(.top, HiveSpacing.sm)
+
+            VStack(spacing: HiveSpacing.xs) {
+                Text("Join Hive")
+                    .font(HiveTypography.title2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(themeManager.currentTheme.primaryTextColor)
+
+                Text("Enter the invite code your friend shared to hop into their hive.")
+                    .font(HiveTypography.body)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                    .padding(.horizontal, HiveSpacing.lg)
+            }
+
+            VStack(alignment: .leading, spacing: HiveSpacing.xs) {
+                Text("Invite Code")
+                    .font(HiveTypography.caption)
+                    .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+
+                TextField("ABC123", text: $inviteCode)
+                    .textInputAutocapitalization(.characters)
+                    .disableAutocorrection(true)
+                    .font(HiveTypography.headline)
+                    .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: HiveRadius.medium)
+                            .fill(themeManager.currentTheme.cardBackgroundColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                    .stroke(themeManager.currentTheme.secondaryTextColor.opacity(0.2), lineWidth: 1)
+                            )
+                    )
+                    .focused($isFocused)
+                    .onChange(of: inviteCode) { newValue in
+                        let filtered = newValue.uppercased().filter { $0.isLetter || $0.isNumber }
+                        if filtered != inviteCode {
+                            inviteCode = filtered
+                        }
+                    }
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(HiveTypography.caption)
+                    .foregroundColor(HiveColors.error)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity)
+            }
+
+            Button {
+                Task { await viewModel.joinHive(code: inviteCode) }
+            } label: {
+                HStack(spacing: HiveSpacing.sm) {
+                    if isJoining {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                    }
+                    Text(isJoining ? "Joining…" : "Join Hive")
+                        .font(HiveTypography.headline)
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, HiveSpacing.sm)
+                .background(
+                    LinearGradient(
+                        colors: [HiveColors.honeyGradientStart, HiveColors.honeyGradientEnd],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .cornerRadius(HiveRadius.modal)
+                )
+                .shadow(color: HiveColors.honeyGradientEnd.opacity(0.25), radius: 10, x: 0, y: 6)
+            }
+            .buttonStyle(.plain)
+            .disabled(isJoining || inviteCode.count < 4)
+            .opacity(inviteCode.count < 4 && !isJoining ? 0.6 : 1)
+
+            Button(role: .cancel) {
+                dismiss()
+                viewModel.resetJoinStatus()
+            } label: {
+                Text("Cancel")
+                    .font(HiveTypography.body)
+                    .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                    .padding(.vertical, HiveSpacing.sm)
+                    .frame(maxWidth: .infinity)
+            }
+
+            Spacer(minLength: HiveSpacing.md)
+        }
+        .padding(.horizontal, HiveSpacing.lg)
+        .padding(.bottom, HiveSpacing.xl)
+        .background(themeManager.currentTheme.backgroundColor)
+    }
+
+    private var successView: some View {
+        VStack(spacing: HiveSpacing.md) {
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundColor(HiveColors.mintSuccess)
+                .font(.system(size: 44))
+
+            Text(successMessage.isEmpty ? "Joined!" : successMessage)
+                .font(HiveTypography.title3)
+                .multilineTextAlignment(.center)
+                .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                .padding(.horizontal, HiveSpacing.lg)
+        }
+        .padding(HiveSpacing.lg)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(themeManager.currentTheme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(themeManager.currentTheme == .night ? 0.35 : 0.1), radius: 16, x: 0, y: 8)
+        )
+        .padding(.horizontal, HiveSpacing.lg)
+    }
+}
+
+private extension Calendar {
+    func startOfWeek(for date: Date) -> Date {
+        let components = dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        return self.date(from: components) ?? date
+    }
+}
+
 
 // MARK: - Habit Selection Row
 struct HabitSelectionRow: View {
@@ -1758,7 +2295,14 @@ struct YearOverviewCard: View {
                 .fontWeight(.semibold)
                 .foregroundColor(theme.primaryTextColor)
 
-            YearHeatmapView(data: yearData, theme: theme)
+            YearHeatmapView(
+                startDate: Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date(),
+                endDate: Date(),
+                data: yearData,
+                maxValue: yearData.values.max() ?? 1,
+                accentColor: HiveColors.honeyGradientStart,
+                theme: theme
+            )
         }
         .padding(HiveSpacing.lg)
         .background(

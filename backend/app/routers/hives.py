@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
+from fastapi import APIRouter, HTTPException, status, Depends, Query, Response
 from app.models.schemas import (
     Hive, HiveCreate, HiveUpdate, HiveFromHabit,
     HiveMember, HiveMemberDay, LogHiveRequest,
@@ -669,7 +669,7 @@ async def delete_hive(
         for key in to_delete_invites:
             test_hive_invites.pop(key, None)
 
-        return {"success": True, "message": "Hive deleted"}
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     try:
         supabase = get_user_supabase_client(current_user)
@@ -685,7 +685,7 @@ async def delete_hive(
 
         supabase.table("hives").delete().eq("id", hive_id).execute()
 
-        return {"success": True, "message": "Hive deleted"}
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except HTTPException:
         raise
     except Exception as e:
