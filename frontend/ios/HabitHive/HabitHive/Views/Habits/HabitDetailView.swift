@@ -154,21 +154,22 @@ struct HabitDetailView: View {
     }
     
     private var statsSection: some View {
-        HStack(spacing: HiveSpacing.sm) {
+        let displayHabit = viewModel.habit ?? currentHabit
+        return HStack(spacing: HiveSpacing.sm) {
             StatCard(
                 title: "Current Streak",
-                value: "\(currentHabit.currentStreak ?? 0)",
+                value: "\(displayHabit.currentStreak ?? 0)",
                 icon: "flame.fill",
                 color: .orange
             )
-            
+
             StatCard(
                 title: "Completion",
-                value: "\(Int(currentHabit.completionRate ?? 0))%",
+                value: "\(Int(displayHabit.completionRate ?? 0))%",
                 icon: "chart.pie.fill",
-                color: currentHabit.color
+                color: displayHabit.color
             )
-            
+
             StatCard(
                 title: "Total Days",
                 value: "\(viewModel.totalDays)",

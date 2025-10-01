@@ -3,13 +3,13 @@ import SwiftUI
 struct HoneyPourAnimationView: View {
     let habit: Habit
     let onComplete: () -> Void
-    
+
+    @State private var honeyDropOffset: CGFloat = -200
+    @State private var hexagonBounce: CGFloat = 0
     @State private var pourProgress: CGFloat = 0
     @State private var showCheckmark = false
-    @State private var beeRotation: Double = 0
-    @State private var honeyDrops: [HoneyDrop] = []
     @StateObject private var themeManager = ThemeManager.shared
-    
+
     var body: some View {
         ZStack {
             // Semi-transparent background
@@ -21,29 +21,44 @@ struct HoneyPourAnimationView: View {
                         onComplete()
                     }
                 }
-            
+
             VStack(spacing: HiveSpacing.xl) {
-                // Animated Bee
-                Text("🐝")
-                    .font(.system(size: 80))
-                    .rotationEffect(.degrees(beeRotation))
-                    .offset(y: showCheckmark ? -20 : 0)
-                    .animation(.easeInOut(duration: 0.5), value: showCheckmark)
-                
-                // Hexagon container
+                Spacer()
+
+                // Hexagon container with honey drop animation
                 ZStack {
+                    // Falling honey drop
+                    if honeyDropOffset > -200 && honeyDropOffset < 50 {
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [HiveColors.honeyGradientStart, HiveColors.honeyGradientEnd],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .frame(width: 30, height: 30)
+                                .shadow(color: HiveColors.honeyGradientEnd.opacity(0.5), radius: 8, x: 0, y: 4)
+
+                            Text("🍯")
+                                .font(.system(size: 24))
+                        }
+                        .offset(y: honeyDropOffset)
+                    }
+
                     // Background hexagon
                     HexagonShape()
                         .stroke(habit.color.opacity(0.3), lineWidth: 4)
                         .frame(width: 150, height: 150)
-                    
+
                     // Filling hexagon (honey pour effect)
                     HexagonShape()
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    habit.color.opacity(0.8),
-                                    habit.color
+                                    HiveColors.honeyGradientStart.opacity(0.8),
+                                    HiveColors.honeyGradientEnd
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -57,13 +72,13 @@ struct HoneyPourAnimationView: View {
                                     .frame(height: 150 * pourProgress)
                             }
                         )
-                    
+
                     // Habit emoji
                     Text(habit.emoji ?? "✨")
                         .font(.system(size: 60))
                         .scaleEffect(showCheckmark ? 1.2 : 1.0)
                         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showCheckmark)
-                    
+
                     // Checkmark overlay
                     if showCheckmark {
                         Image(systemName: "checkmark.circle.fill")
@@ -72,27 +87,24 @@ struct HoneyPourAnimationView: View {
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
-                
-                // Honey drops animation
-                ZStack {
-                    ForEach(honeyDrops) { drop in
-                        HoneyDropView(drop: drop)
-                    }
-                }
-                .frame(height: 100)
-                
+                .offset(y: hexagonBounce)
+
+
                 // Completion text
                 VStack(spacing: HiveSpacing.xs) {
                     Text(showCheckmark ? "Great job!" : "Logging...")
                         .font(HiveTypography.headline)
-                        .foregroundColor(.white)
-                    
+                        .fontWeight(.semibold)
+                        .foregroundColor(HiveColors.beeBlack)
+
                     if habit.type == .counter {
                         Text("\(habit.targetPerDay) / \(habit.targetPerDay)")
                             .font(HiveTypography.body)
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(HiveColors.slateText)
                     }
                 }
+
+                Spacer()
             }
             .padding(HiveSpacing.xl)
             .background(
@@ -109,38 +121,44 @@ struct HoneyPourAnimationView: View {
     }
     
     private func startAnimation() {
-        // Bee rotation animation
-        withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
-            beeRotation = 360
+        // Step 1: Honey drop falls from top (0 to 0.6s)
+        withAnimation(.easeIn(duration: 0.6)) {
+            honeyDropOffset = 0
         }
-        
-        // Pour animation
-        withAnimation(.easeInOut(duration: 1.5)) {
-            pourProgress = 1.0
-        }
-        
-        // Generate honey drops
-        for i in 0..<5 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.2) {
-                let drop = HoneyDrop(
-                    id: UUID(),
-                    startX: CGFloat.random(in: -30...30),
-                    delay: Double(i) * 0.1
-                )
-                honeyDrops.append(drop)
-            }
-        }
-        
-        // Show completion
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-            withAnimation(.spring()) {
-                showCheckmark = true
-            }
-            
-            // Haptic feedback
+
+        // Step 2: Impact and hexagon bounce (at 0.6s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            // Haptic feedback on impact
             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
             impactFeedback.impactOccurred()
-            
+
+            // Hexagon bounces down and back up
+            withAnimation(.easeOut(duration: 0.15)) {
+                hexagonBounce = 8
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                    hexagonBounce = 0
+                }
+            }
+
+            // Honey fills the hexagon
+            withAnimation(.easeOut(duration: 0.8)) {
+                pourProgress = 1.0
+            }
+        }
+
+        // Step 3: Show completion (at 1.6s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                showCheckmark = true
+            }
+
+            // Success haptic
+            let successFeedback = UINotificationFeedbackGenerator()
+            successFeedback.notificationOccurred(.success)
+
             // Auto dismiss
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 onComplete()

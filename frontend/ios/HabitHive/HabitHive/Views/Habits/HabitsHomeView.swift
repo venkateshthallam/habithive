@@ -10,12 +10,16 @@ struct HabitsHomeView: View {
     @State private var selectedHabit: Habit?
     @State private var showHoneyPour = false
     @State private var honeyPourHabitId: String?
-    
+
+    private var backgroundColor: Color {
+        themeManager.currentTheme == .night ? themeManager.currentTheme.backgroundColor : HiveColors.creamBase
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 // Background
-                themeManager.currentTheme.backgroundColor
+                backgroundColor
                     .ignoresSafeArea()
                 
                 ScrollView {

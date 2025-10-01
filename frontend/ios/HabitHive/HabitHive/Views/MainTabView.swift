@@ -131,8 +131,8 @@ struct HivesView: View {
                 .foregroundColor(HiveColors.beeBlack)
 
             YearHeatmapView(
-                startDate: Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date(),
-                endDate: Date(),
+                startDate: Calendar.current.date(from: DateComponents(year: Calendar.current.component(.year, from: Date()), month: 1, day: 1)) ?? Date(),
+                endDate: Calendar.current.date(from: DateComponents(year: Calendar.current.component(.year, from: Date()), month: 12, day: 31)) ?? Date(),
                 data: viewModel.yearComb,
                 maxValue: viewModel.yearComb.values.max() ?? 1,
                 accentColor: HiveColors.honeyGradientStart,
@@ -650,9 +650,13 @@ class HivesViewModel: ObservableObject {
             }
         } catch {
             self.errorMessage = error.localizedDescription
-            self.hives = []
-            self.leaderboard = []
-            lastLoadedAt = nil
+            // Don't clear existing hives on refresh error - keep cached data
+            if !force {
+                // Only clear on initial load failure
+                self.hives = []
+                self.leaderboard = []
+                lastLoadedAt = nil
+            }
         }
 
         isLoading = false
@@ -703,10 +707,14 @@ struct InsightsView: View {
     @StateObject private var themeManager = ThemeManager.shared
     @StateObject private var viewModel = InsightsViewModel()
 
+    private var backgroundColor: Color {
+        themeManager.currentTheme == .night ? themeManager.currentTheme.backgroundColor : HiveColors.creamBase
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
-                themeManager.currentTheme.backgroundColor
+                backgroundColor
                     .ignoresSafeArea()
 
                 insightsContent
@@ -720,7 +728,7 @@ struct InsightsView: View {
                 }
             }
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(themeManager.currentTheme.backgroundColor.opacity(0.95), for: .navigationBar)
+            .toolbarBackground(backgroundColor.opacity(0.95), for: .navigationBar)
             .toolbarColorScheme(themeManager.currentTheme == .night ? .dark : .light, for: .navigationBar)
         }
         .onAppear {
@@ -739,15 +747,15 @@ struct InsightsView: View {
             }
         } else if let _ = viewModel.dashboard {
             ScrollView {
-                VStack(alignment: .leading, spacing: HiveSpacing.lg) {
+                VStack(alignment: .leading, spacing: HiveSpacing.md) {
                     rangePicker
+                        .padding(.top, HiveSpacing.sm)
                     statsCards
                     yearOverviewCard
                     habitPerformanceCard
                 }
                 .padding(.horizontal, HiveSpacing.lg)
                 .padding(.bottom, HiveSpacing.xl)
-                .padding(.top, HiveSpacing.lg)
             }
             .refreshable {
                 await viewModel.refreshInsights()
@@ -781,15 +789,21 @@ struct InsightsView: View {
         let theme = themeManager.currentTheme
         return Picker("Range", selection: $viewModel.selectedRange) {
             ForEach(InsightRange.allCases, id: \.self) { range in
-                Text(range.displayName).tag(range)
+                Text(range.displayName)
+                    .fontWeight(.semibold)
+                    .tag(range)
             }
         }
         .pickerStyle(.segmented)
-        .padding(4)
+        .padding(6)
         .background(
-            RoundedRectangle(cornerRadius: HiveRadius.medium)
-                .fill(theme.cardBackgroundColor)
-                .shadow(color: Color.black.opacity(theme == .night ? 0.3 : 0.08), radius: 8, x: 0, y: 4)
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .stroke(HiveColors.honeyGradientEnd.opacity(0.2), lineWidth: 1)
         )
         .tint(HiveColors.honeyGradientEnd)
     }
@@ -1282,11 +1296,16 @@ struct ProfileView: View {
     @State private var showSettings = false
     @State private var isEditingName = false
     @State private var newDisplayName = ""
-    
+    @State private var showEditProfile = false
+
+    private var backgroundColor: Color {
+        themeManager.currentTheme == .night ? themeManager.currentTheme.backgroundColor : HiveColors.creamBase
+    }
+
 var body: some View {
         NavigationView {
             ZStack {
-                themeManager.currentTheme.backgroundColor
+                backgroundColor
                     .ignoresSafeArea()
 
                 ScrollView {
@@ -1315,39 +1334,30 @@ var body: some View {
                             }
 
                             VStack(spacing: HiveSpacing.sm) {
-                                if isEditingName {
-                                    TextField("Display Name", text: $newDisplayName)
-                                        .font(HiveTypography.title2)
-                                        .foregroundColor(themeManager.currentTheme.primaryTextColor)
-                                        .multilineTextAlignment(.center)
-                                        .padding(HiveSpacing.sm)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: HiveRadius.medium)
-                                                .fill(themeManager.currentTheme.cardBackgroundColor.opacity(0.6))
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: HiveRadius.medium)
-                                                        .stroke(themeManager.currentTheme.secondaryTextColor.opacity(0.3), lineWidth: 1)
-                                                )
-                                        )
-                                        .frame(maxWidth: 200)
-                                        .onSubmit {
-                                            viewModel.updateDisplayName(newDisplayName)
-                                            isEditingName = false
-                                        }
-                                } else {
-                                    Text(viewModel.displayName)
-                                        .font(HiveTypography.title2)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(themeManager.currentTheme.primaryTextColor)
-                                        .onTapGesture {
-                                            newDisplayName = viewModel.displayName
-                                            isEditingName = true
-                                        }
-                                }
+                                Text(viewModel.displayName)
+                                    .font(HiveTypography.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(themeManager.currentTheme.primaryTextColor)
 
                                 Text(viewModel.phone.isEmpty ? "Add your phone to find friends" : viewModel.phone)
                                     .font(HiveTypography.body)
                                     .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+
+                                Button {
+                                    showEditProfile = true
+                                } label: {
+                                    Text("Edit Profile")
+                                        .font(HiveTypography.caption)
+                                        .foregroundColor(HiveColors.honeyGradientEnd)
+                                        .padding(.horizontal, HiveSpacing.md)
+                                        .padding(.vertical, HiveSpacing.xs)
+                                        .background(
+                                            Capsule()
+                                                .stroke(HiveColors.honeyGradientEnd, lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, HiveSpacing.xs)
                             }
                         }
                         .padding(HiveSpacing.lg)
@@ -1515,6 +1525,9 @@ var body: some View {
             } message: {
                 Text(viewModel.deleteError ?? "Please try again later.")
             }
+            .sheet(isPresented: $showEditProfile) {
+                EditProfileSheet(viewModel: viewModel)
+            }
         }
     }
 
@@ -1556,6 +1569,173 @@ struct SettingsRow: View {
     }
 }
 
+struct EditProfileSheet: View {
+    @ObservedObject var viewModel: ProfileViewModel
+    @StateObject private var themeManager = ThemeManager.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var displayName: String = ""
+    @State private var phone: String = ""
+    @State private var showSuccessToast = false
+    @FocusState private var focusedField: EditProfileField?
+
+    enum EditProfileField {
+        case displayName, phone
+    }
+
+    private var backgroundColor: Color {
+        themeManager.currentTheme == .night ? themeManager.currentTheme.backgroundColor : HiveColors.creamBase
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                backgroundColor
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: HiveSpacing.lg) {
+                        VStack(alignment: .leading, spacing: HiveSpacing.xs) {
+                            Text("Display Name")
+                                .font(HiveTypography.caption)
+                                .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+
+                            TextField("Enter your name", text: $displayName)
+                                .font(HiveTypography.body)
+                                .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                                .padding()
+                                .background(
+                                    RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                        .fill(themeManager.currentTheme.cardBackgroundColor)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                                .stroke(themeManager.currentTheme.secondaryTextColor.opacity(0.2), lineWidth: 1)
+                                        )
+                                )
+                                .focused($focusedField, equals: .displayName)
+                        }
+
+                        VStack(alignment: .leading, spacing: HiveSpacing.xs) {
+                            Text("Phone Number")
+                                .font(HiveTypography.caption)
+                                .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+
+                            TextField("Enter your phone number", text: $phone)
+                                .font(HiveTypography.body)
+                                .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                                .keyboardType(.phonePad)
+                                .padding()
+                                .background(
+                                    RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                        .fill(themeManager.currentTheme.cardBackgroundColor)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: HiveRadius.medium)
+                                                .stroke(themeManager.currentTheme.secondaryTextColor.opacity(0.2), lineWidth: 1)
+                                        )
+                                )
+                                .focused($focusedField, equals: .phone)
+                        }
+
+                        if let error = viewModel.updateError {
+                            Text(error)
+                                .font(HiveTypography.caption)
+                                .foregroundColor(HiveColors.error)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .transition(.opacity)
+                        }
+
+                        Button {
+                            Task {
+                                let success = await viewModel.updateProfile(
+                                    displayName: displayName,
+                                    phone: phone
+                                )
+                                if success {
+                                    withAnimation {
+                                        showSuccessToast = true
+                                    }
+#if canImport(UIKit)
+                                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+#endif
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                        dismiss()
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: HiveSpacing.sm) {
+                                if viewModel.isUpdatingProfile {
+                                    ProgressView()
+                                        .progressViewStyle(.circular)
+                                        .tint(.white)
+                                }
+                                Text(viewModel.isUpdatingProfile ? "Saving…" : "Save Changes")
+                                    .font(HiveTypography.headline)
+                                    .foregroundColor(.white)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, HiveSpacing.sm)
+                            .background(
+                                LinearGradient(
+                                    colors: [HiveColors.honeyGradientStart, HiveColors.honeyGradientEnd],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                                .cornerRadius(HiveRadius.modal)
+                            )
+                            .shadow(color: HiveColors.honeyGradientEnd.opacity(0.25), radius: 10, x: 0, y: 6)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(viewModel.isUpdatingProfile || displayName.isEmpty)
+                        .opacity(displayName.isEmpty && !viewModel.isUpdatingProfile ? 0.6 : 1)
+
+                        Spacer()
+                    }
+                    .padding(HiveSpacing.lg)
+                }
+
+                if showSuccessToast {
+                    VStack {
+                        Spacer()
+                        HStack(spacing: HiveSpacing.sm) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(HiveColors.mintSuccess)
+                            Text("Profile updated!")
+                                .font(HiveTypography.body)
+                                .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                        }
+                        .padding(.horizontal, HiveSpacing.lg)
+                        .padding(.vertical, HiveSpacing.md)
+                        .background(
+                            RoundedRectangle(cornerRadius: HiveRadius.large)
+                                .fill(themeManager.currentTheme.cardBackgroundColor)
+                                .shadow(color: .black.opacity(0.2), radius: 12, x: 0, y: 6)
+                        )
+                        .padding(.bottom, HiveSpacing.xl)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .navigationTitle("Edit Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(themeManager.currentTheme.primaryTextColor)
+                }
+            }
+            .onAppear {
+                displayName = viewModel.displayName
+                phone = viewModel.phone
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    focusedField = .displayName
+                }
+            }
+        }
+    }
+}
+
 
 class ProfileViewModel: ObservableObject {
     @Published var displayName = "Bee"
@@ -1568,6 +1748,8 @@ class ProfileViewModel: ObservableObject {
     @Published var showDeleteConfirmation = false
     @Published var deleteError: String?
     @Published var isDeletingAccount = false
+    @Published var isUpdatingProfile = false
+    @Published var updateError: String?
 
     private let apiClient = FastAPIClient.shared
 
@@ -1592,6 +1774,40 @@ class ProfileViewModel: ObservableObject {
             } catch {
                 print("Failed to update profile: \(error)")
             }
+        }
+    }
+
+    func updateProfile(displayName: String, phone: String) async -> Bool {
+        await MainActor.run {
+            isUpdatingProfile = true
+            updateError = nil
+        }
+        defer {
+            Task { @MainActor in
+                isUpdatingProfile = false
+            }
+        }
+
+        do {
+            let update = ProfileUpdate(
+                displayName: displayName.isEmpty ? nil : displayName,
+                phone: phone.isEmpty ? nil : phone
+            )
+            let updated = try await apiClient.updateProfile(update)
+            await MainActor.run {
+                self.displayName = updated.displayName
+                self.phone = updated.phone
+            }
+            return true
+        } catch {
+            await MainActor.run {
+                if let apiError = error as? FastAPIError {
+                    updateError = apiError.localizedDescription
+                } else {
+                    updateError = error.localizedDescription
+                }
+            }
+            return false
         }
     }
 
@@ -1830,36 +2046,62 @@ struct YearHeatmapView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: HiveSpacing.sm) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                let labels = monthLabels
-                LazyHStack(alignment: .top, spacing: 4) {
-                    ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
-                        VStack(spacing: 4) {
-                            Text(labels[index])
-                                .font(HiveTypography.caption2)
-                                .foregroundColor(theme.secondaryTextColor)
-                                .frame(height: 12)
-
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    let labels = monthLabels
+                    LazyHStack(alignment: .top, spacing: 4) {
+                        ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
                             VStack(spacing: 4) {
-                                ForEach(0..<7, id: \.self) { row in
-                                    let day = week[row]
-                                    HeatmapCell(
-                                        value: value(for: day),
-                                        color: cellColor(for: value(for: day)),
-                                        theme: theme
-                                    )
+                                Text(labels[index])
+                                    .font(HiveTypography.caption2)
+                                    .foregroundColor(theme.secondaryTextColor)
+                                    .frame(height: 12)
+
+                                VStack(spacing: 4) {
+                                    ForEach(0..<7, id: \.self) { row in
+                                        let day = week[row]
+                                        HeatmapCell(
+                                            value: value(for: day),
+                                            color: cellColor(for: value(for: day)),
+                                            theme: theme
+                                        )
+                                    }
                                 }
+                            }
+                            .id(index)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .onAppear {
+                    // Scroll to current month
+                    if let currentWeekIndex = currentMonthWeekIndex {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation {
+                                proxy.scrollTo(currentWeekIndex, anchor: .center)
                             }
                         }
                     }
                 }
-                .padding(.vertical, 2)
             }
 
             if maxValue > 0 {
                 HeatmapLegend(accent: accentColor, theme: theme)
             }
         }
+    }
+
+    private var currentMonthWeekIndex: Int? {
+        let currentMonth = calendar.component(.month, from: Date())
+        for (index, week) in weeks.enumerated() {
+            let validDays = week.filter { $0 >= startDate && $0 <= endDate }
+            guard let reference = validDays.first else { continue }
+            let month = calendar.component(.month, from: reference)
+            if month == currentMonth {
+                return index
+            }
+        }
+        return nil
     }
 }
 

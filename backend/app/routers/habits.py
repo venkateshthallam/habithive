@@ -289,7 +289,14 @@ async def get_habit(
                 logs,
                 target=habit_with_logs.target_per_day,
             )
-        
+
+            # Calculate completion rate (last 30 days)
+            from datetime import date, timedelta
+            thirty_days_ago = date.today() - timedelta(days=30)
+            recent_logs = [l for l in logs if date.fromisoformat(l["log_date"]) >= thirty_days_ago]
+            unique_days = len(set(l["log_date"] for l in recent_logs))
+            habit_with_logs.completion_rate = (unique_days / 30) * 100 if unique_days > 0 else 0
+
         return habit_with_logs
     except Exception as e:
         raise HTTPException(
