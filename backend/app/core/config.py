@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "habithive-test-secret-key-2024")
     TEST_MODE: bool = os.getenv("TEST_MODE", "false").lower() == "true"
     AUTH_TOKEN_MAX_SKEW_SECONDS: int = int(os.getenv("AUTH_TOKEN_MAX_SKEW_SECONDS", "14400"))
-    PORT: int = 8002
+    PORT: int = int(os.getenv("PORT", "8002"))
     
     class Config:
         env_file = ".env"
