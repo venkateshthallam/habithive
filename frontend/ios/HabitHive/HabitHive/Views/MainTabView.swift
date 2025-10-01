@@ -42,6 +42,7 @@ struct HivesView: View {
     @StateObject private var viewModel = HivesViewModel()
     @State private var showCreateHive = false
     @State private var showJoinHive = false
+    @State private var refreshTrigger = UUID()
 
     private var backgroundColor: Color {
         themeManager.currentTheme == .night ? themeManager.currentTheme.backgroundColor : HiveColors.creamBase
@@ -64,7 +65,13 @@ struct HivesView: View {
                         } else {
                             VStack(spacing: HiveSpacing.lg) {
                                 ForEach(viewModel.hives) { hive in
-                                    NavigationLink(destination: HiveDetailView(hiveId: hive.id)) {
+                                    NavigationLink(destination:
+                                        HiveDetailView(hiveId: hive.id)
+                                            .onDisappear {
+                                                // Refresh hives when returning from detail view
+                                                viewModel.loadHives()
+                                            }
+                                    ) {
                                         HiveCard(hive: hive, theme: themeManager.currentTheme)
                                     }
                                 }
@@ -749,12 +756,12 @@ struct InsightsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: HiveSpacing.md) {
                     rangePicker
-                        .padding(.top, HiveSpacing.sm)
                     statsCards
                     yearOverviewCard
                     habitPerformanceCard
                 }
                 .padding(.horizontal, HiveSpacing.lg)
+                .padding(.top, HiveSpacing.xs)
                 .padding(.bottom, HiveSpacing.xl)
             }
             .refreshable {
@@ -799,11 +806,11 @@ struct InsightsView: View {
         .background(
             RoundedRectangle(cornerRadius: HiveRadius.large)
                 .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.3 : 0.15), radius: 12, x: 0, y: 4)
         )
         .overlay(
             RoundedRectangle(cornerRadius: HiveRadius.large)
-                .stroke(HiveColors.honeyGradientEnd.opacity(0.2), lineWidth: 1)
+                .stroke(theme == .night ? Color.white.opacity(0.1) : HiveColors.honeyGradientEnd.opacity(0.3), lineWidth: 1.5)
         )
         .tint(HiveColors.honeyGradientEnd)
     }

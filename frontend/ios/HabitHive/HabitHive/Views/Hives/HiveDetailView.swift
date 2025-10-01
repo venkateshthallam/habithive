@@ -169,16 +169,21 @@ struct HiveDetailView: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(Color.white.opacity(0.85))
+                            .fill(viewModel.hasCompletedToday(hive: hive) ? HiveColors.mintSuccess.opacity(0.3) : Color.white.opacity(0.85))
                             .frame(width: 52, height: 52)
                             .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
 
-                        Text("🐝")
-                            .font(.system(size: 28))
+                        if viewModel.hasCompletedToday(hive: hive) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(HiveColors.mintSuccess)
+                        } else {
+                            Text("🐝")
+                                .font(.system(size: 28))
+                        }
                     }
                 }
                 .disabled(viewModel.hasCompletedToday(hive: hive))
-                .opacity(viewModel.hasCompletedToday(hive: hive) ? 0.4 : 1)
             }
 
             HStack(spacing: HiveSpacing.md) {

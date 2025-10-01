@@ -423,7 +423,7 @@ struct HoneycombGridView: View {
         target: Int,
         type: HabitType,
         theme: AppTheme,
-        weeksToShow: Int = 8
+        weeksToShow: Int = 5
     ) {
         self.weeksToShow = weeksToShow
         self.theme = theme
@@ -440,21 +440,36 @@ struct HoneycombGridView: View {
         let cellSize: CGFloat = 16
         let horizontalSpacing: CGFloat = 6
         let verticalSpacing: CGFloat = 6
+        let dayLabels = ["M", "T", "W", "T", "F", "S", "S"]
 
-        VStack(alignment: .leading, spacing: verticalSpacing) {
-            ForEach(0..<7, id: \.self) { row in
-                HStack(spacing: horizontalSpacing) {
-                    ForEach(0..<weeksToShow, id: \.self) { column in
-                        let cell = grid[column][row]
-                        HoneycombCellView(
-                            cell: cell,
-                            accentColor: accentColor,
-                            theme: theme
-                        )
-                        .frame(width: cellSize, height: cellSize)
-                    }
+        HStack(alignment: .top, spacing: 8) {
+            // Weekday labels
+            VStack(alignment: .trailing, spacing: verticalSpacing) {
+                ForEach(0..<7, id: \.self) { row in
+                    Text(dayLabels[row])
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(theme.secondaryTextColor.opacity(0.6))
+                        .frame(width: 12, height: cellSize, alignment: .trailing)
                 }
-                .offset(x: row.isMultiple(of: 2) ? 0 : (cellSize + horizontalSpacing) / 2)
+            }
+            .padding(.top, 2)
+
+            // Grid
+            VStack(alignment: .leading, spacing: verticalSpacing) {
+                ForEach(0..<7, id: \.self) { row in
+                    HStack(spacing: horizontalSpacing) {
+                        ForEach(0..<weeksToShow, id: \.self) { column in
+                            let cell = grid[column][row]
+                            HoneycombCellView(
+                                cell: cell,
+                                accentColor: accentColor,
+                                theme: theme
+                            )
+                            .frame(width: cellSize, height: cellSize)
+                        }
+                    }
+                    .offset(x: row.isMultiple(of: 2) ? 0 : (cellSize + horizontalSpacing) / 2)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

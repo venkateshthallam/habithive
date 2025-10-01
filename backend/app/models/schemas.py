@@ -197,7 +197,6 @@ class HiveMemberDay(BaseModel):
     created_at: Optional[datetime] = None
 
 class LogHiveRequest(BaseModel):
-    hive_id: UUID
     value: int = Field(1, gt=0)
     at: Optional[datetime] = None
 
