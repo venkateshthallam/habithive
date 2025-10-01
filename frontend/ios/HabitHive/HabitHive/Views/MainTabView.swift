@@ -785,8 +785,12 @@ struct InsightsView: View {
             }
         }
         .pickerStyle(.segmented)
-        .background(theme.cardBackgroundColor)
-        .cornerRadius(HiveRadius.medium)
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.medium)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.3 : 0.08), radius: 8, x: 0, y: 4)
+        )
         .tint(HiveColors.honeyGradientEnd)
     }
 

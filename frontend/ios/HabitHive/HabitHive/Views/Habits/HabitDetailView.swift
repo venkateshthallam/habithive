@@ -215,7 +215,10 @@ struct HabitDetailView: View {
             MonthCalendarView(
                 month: selectedMonth,
                 habit: habit,
-                logs: viewModel.logs
+                logs: viewModel.logs,
+                onDateTap: { date in
+                    viewModel.toggleDateLog(date: date, habit: habit)
+                }
             )
         }
         .padding(HiveSpacing.lg)
@@ -306,9 +309,10 @@ struct MonthCalendarView: View {
     let month: Date
     let habit: Habit
     let logs: [HabitLog]
-    
+    let onDateTap: (Date) -> Void
+
     private let weekDays = ["S", "M", "T", "W", "T", "F", "S"]
-    
+
     var body: some View {
         let days = getDaysInMonth()
         VStack(spacing: HiveSpacing.xs) {
@@ -321,7 +325,7 @@ struct MonthCalendarView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            
+
             // Calendar grid
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: HiveSpacing.xs), count: 7), spacing: HiveSpacing.xs) {
                 ForEach(Array(days.enumerated()), id: \.offset) { _, date in
@@ -330,7 +334,8 @@ struct MonthCalendarView: View {
                             date: date,
                             habit: habit,
                             isCompleted: isDateCompleted(date),
-                            value: getValueForDate(date)
+                            value: getValueForDate(date),
+                            onTap: { onDateTap(date) }
                         )
                     } else {
                         Color.clear
@@ -380,32 +385,44 @@ struct DayCell: View {
     let habit: Habit
     let isCompleted: Bool
     let value: Int
-    
+    let onTap: () -> Void
+
     private var isToday: Bool {
         Calendar.current.isDateInToday(date)
     }
-    
+
+    private var isFutureDate: Bool {
+        date > Date()
+    }
+
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: HiveRadius.small)
-                .fill(backgroundColor)
-                .overlay(
-                    RoundedRectangle(cornerRadius: HiveRadius.small)
-                        .stroke(isToday ? habit.color : Color.clear, lineWidth: 2)
-                )
-            
-            VStack(spacing: 2) {
-                Text("\(Calendar.current.component(.day, from: date))")
-                    .font(HiveTypography.caption)
-                    .foregroundColor(textColor)
-                
-                if habit.type == .counter && isCompleted {
-                    Text("\(value)")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(habit.color)
+        Button(action: {
+            guard !isFutureDate else { return }
+            onTap()
+        }) {
+            ZStack {
+                RoundedRectangle(cornerRadius: HiveRadius.small)
+                    .fill(backgroundColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: HiveRadius.small)
+                            .stroke(isToday ? habit.color : Color.clear, lineWidth: 2)
+                    )
+
+                VStack(spacing: 2) {
+                    Text("\(Calendar.current.component(.day, from: date))")
+                        .font(HiveTypography.caption)
+                        .foregroundColor(textColor)
+
+                    if habit.type == .counter && isCompleted {
+                        Text("\(value)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(habit.color)
+                    }
                 }
             }
         }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(isFutureDate)
         .frame(height: 40)
     }
     
@@ -498,7 +515,60 @@ class HabitDetailViewModel: ObservableObject {
         totalDays = Set(logs.map { $0.logDate }).count
     }
 
+    func toggleDateLog(date: Date, habit: Habit) {
+        let dateString = DateFormatter.hiveDayFormatter.string(from: date)
+
+        if let existingIndex = logs.firstIndex(where: { $0.logDate == dateString }) {
+            // Delete existing log
+            let removedLog = logs.remove(at: existingIndex)
+            calculateStats(for: habit)
+
+            let logDate = DateFormatter.hiveDayFormatter.date(from: removedLog.logDate)
+            Task {
+                do {
+#if canImport(UIKit)
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+#endif
+                    try await apiClient.deleteHabitLog(habitId: habit.id, logDate: logDate)
+                    await loadHabitDetailsAsync(habitId: habit.id)
+                } catch {
+                    await MainActor.run { self.errorMessage = error.localizedDescription }
+                }
+            }
+        } else {
+            // Create new log
+            let value = habit.type == .counter ? habit.targetPerDay : 1
+            let provisionalLog = HabitLog(
+                id: UUID().uuidString,
+                habitId: habit.id,
+                userId: habit.userId,
+                logDate: dateString,
+                value: value,
+                source: "manual",
+                createdAt: Date()
+            )
+            logs.append(provisionalLog)
+            calculateStats(for: habit)
+
+            Task {
+                do {
+#if canImport(UIKit)
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+#endif
+                    try await apiClient.logHabit(habitId: habit.id, value: value, on: date)
+                    await loadHabitDetailsAsync(habitId: habit.id)
+                } catch {
+                    await MainActor.run { self.errorMessage = error.localizedDescription }
+                }
+            }
+        }
+    }
+
     func toggleToday(for habit: Habit) {
+        toggleDateLog(date: Date(), habit: habit)
+    }
+
+    func toggleTodayOld(for habit: Habit) {
         let todayString = DateFormatter.hiveDayFormatter.string(from: Date())
 
         if let existingIndex = logs.firstIndex(where: { $0.logDate == todayString }) {

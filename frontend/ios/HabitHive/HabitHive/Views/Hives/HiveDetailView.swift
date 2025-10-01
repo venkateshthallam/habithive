@@ -135,19 +135,7 @@ struct HiveDetailView: View {
 
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
-            if let hive = viewModel.hive {
-                Button { viewModel.createInvite(hiveId: hive.id) } label: {
-                    Image(systemName: "person.crop.circle.badge.plus")
-                }
-                .accessibilityLabel("Invite members")
-
-                Button { viewModel.logToday(hiveId: hive.id) } label: {
-                    Image(systemName: "drop.fill")
-                }
-                .disabled(viewModel.hasCompletedToday(hive: hive))
-                .opacity(viewModel.hasCompletedToday(hive: hive) ? 0.4 : 1)
-                .accessibilityLabel("Log today")
-            }
+            // Toolbar items removed - log button moved to header card
         }
     }
 
@@ -157,20 +145,40 @@ struct HiveDetailView: View {
             : "\(hive.targetPerDay) per day goal"
 
         return VStack(alignment: .leading, spacing: HiveSpacing.lg) {
-            VStack(alignment: .leading, spacing: HiveSpacing.sm) {
-                Text(hive.emoji ?? "🐝")
-                    .font(.system(size: 44))
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+                    Text(hive.emoji ?? "🐝")
+                        .font(.system(size: 44))
 
-                VStack(alignment: .leading, spacing: HiveSpacing.xs) {
-                    Text(hive.name)
-                        .font(HiveTypography.largeTitle)
-                        .fontWeight(.heavy)
-                        .foregroundColor(HiveColors.beeBlack)
+                    VStack(alignment: .leading, spacing: HiveSpacing.xs) {
+                        Text(hive.name)
+                            .font(HiveTypography.largeTitle)
+                            .fontWeight(.heavy)
+                            .foregroundColor(HiveColors.beeBlack)
 
-                    Text(subtitle)
-                        .font(HiveTypography.body)
-                        .foregroundColor(HiveColors.beeBlack.opacity(0.75))
+                        Text(subtitle)
+                            .font(HiveTypography.body)
+                            .foregroundColor(HiveColors.beeBlack.opacity(0.75))
+                    }
                 }
+
+                Spacer()
+
+                Button {
+                    viewModel.logToday(hiveId: hive.id)
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.85))
+                            .frame(width: 52, height: 52)
+                            .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
+
+                        Text("🐝")
+                            .font(.system(size: 28))
+                    }
+                }
+                .disabled(viewModel.hasCompletedToday(hive: hive))
+                .opacity(viewModel.hasCompletedToday(hive: hive) ? 0.4 : 1)
             }
 
             HStack(spacing: HiveSpacing.md) {
@@ -595,12 +603,12 @@ class HiveDetailViewModel: ObservableObject {
 
     var isOwner: Bool {
         guard let hive, let me = api.currentUser?.id else {
-            print("DEBUG: isOwner - No hive or currentUser")
             return false
         }
-        let result = hive.ownerId == me
-        print("DEBUG: isOwner - hiveOwnerId: \(hive.ownerId), currentUserId: \(me), match: \(result)")
-        return result
+        // Normalize both IDs to lowercase for comparison (handles UUID case sensitivity)
+        let normalizedOwnerId = hive.ownerId.lowercased()
+        let normalizedUserId = me.lowercased()
+        return normalizedOwnerId == normalizedUserId
     }
 
     func hasCompletedToday(hive: HiveDetail) -> Bool {
