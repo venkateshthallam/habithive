@@ -618,7 +618,9 @@ class HiveDetailViewModel: ObservableObject {
 
     func hasCompletedToday(hive: HiveDetail) -> Bool {
         guard let me = api.currentUser?.id else { return false }
-        return hive.members.first(where: { $0.userId == me })?.status == .completed
+        let normalizedMe = me.lowercased()
+        let member = hive.members.first { $0.userId.lowercased() == normalizedMe }
+        return member?.status == .completed
     }
 
     func load(hiveId: String) {

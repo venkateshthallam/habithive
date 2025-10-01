@@ -726,18 +726,8 @@ struct InsightsView: View {
 
                 insightsContent
             }
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Insights")
-                        .font(HiveTypography.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(themeManager.currentTheme.primaryTextColor)
-                }
-            }
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(backgroundColor.opacity(0.95), for: .navigationBar)
-            .toolbarColorScheme(themeManager.currentTheme == .night ? .dark : .light, for: .navigationBar)
         }
+        .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             viewModel.loadInsights()
         }
@@ -754,14 +744,14 @@ struct InsightsView: View {
             }
         } else if let _ = viewModel.dashboard {
             ScrollView {
-                VStack(alignment: .leading, spacing: HiveSpacing.md) {
-                    rangePicker
+                VStack(alignment: .leading, spacing: HiveSpacing.lg) {
+                    headerSection
                     statsCards
                     yearOverviewCard
                     habitPerformanceCard
                 }
                 .padding(.horizontal, HiveSpacing.lg)
-                .padding(.top, HiveSpacing.xs)
+                .padding(.top, HiveSpacing.lg)
                 .padding(.bottom, HiveSpacing.xl)
             }
             .refreshable {
@@ -792,27 +782,77 @@ struct InsightsView: View {
         }
     }
 
-    private var rangePicker: some View {
+    private var headerSection: some View {
         let theme = themeManager.currentTheme
-        return Picker("Range", selection: $viewModel.selectedRange) {
+
+        return VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("Insights")
+                .font(HiveTypography.largeTitle)
+                .fontWeight(.heavy)
+                .foregroundColor(theme.primaryTextColor)
+
+            Text("Track your habits across Week, Month, and Year.")
+                .font(HiveTypography.body)
+                .foregroundColor(theme.secondaryTextColor)
+
+            rangeSelector
+        }
+    }
+
+    private var rangeSelector: some View {
+        let theme = themeManager.currentTheme
+
+        return HStack(spacing: HiveSpacing.xs) {
             ForEach(InsightRange.allCases, id: \.self) { range in
-                Text(range.displayName)
-                    .fontWeight(.semibold)
-                    .tag(range)
+                let isSelected = viewModel.selectedRange == range
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        viewModel.selectedRange = range
+                    }
+                } label: {
+                    Text(range.displayName)
+                        .font(HiveTypography.callout)
+                        .fontWeight(.semibold)
+                        .foregroundColor(
+                            isSelected
+                            ? .white
+                            : (theme == .night ? Color.white.opacity(0.85) : HiveColors.slateText)
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            Group {
+                                if isSelected {
+                                    LinearGradient(
+                                        colors: [HiveColors.honeyGradientStart, HiveColors.honeyGradientEnd],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                    .clipShape(RoundedRectangle(cornerRadius: HiveRadius.large))
+                                } else {
+                                    RoundedRectangle(cornerRadius: HiveRadius.large)
+                                        .fill(theme.cardBackgroundColor)
+                                }
+                            }
+                        )
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: HiveRadius.large)
+                        .stroke(
+                            isSelected ? Color.clear : (theme == .night ? Color.white.opacity(0.2) : HiveColors.honeyGradientEnd.opacity(0.2)),
+                            lineWidth: 1
+                        )
+                )
+                .shadow(color: .black.opacity(isSelected ? 0.15 : 0.05), radius: isSelected ? 8 : 4, x: 0, y: isSelected ? 6 : 2)
+                .buttonStyle(.plain)
             }
         }
-        .pickerStyle(.segmented)
         .padding(6)
         .background(
-            RoundedRectangle(cornerRadius: HiveRadius.large)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(theme == .night ? 0.3 : 0.15), radius: 12, x: 0, y: 4)
+            RoundedRectangle(cornerRadius: HiveRadius.large + 4)
+                .fill(theme == .night ? Color.white.opacity(0.08) : Color.white)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.25 : 0.12), radius: 12, x: 0, y: 6)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: HiveRadius.large)
-                .stroke(theme == .night ? Color.white.opacity(0.1) : HiveColors.honeyGradientEnd.opacity(0.3), lineWidth: 1.5)
-        )
-        .tint(HiveColors.honeyGradientEnd)
     }
 
     private var statsCards: some View {

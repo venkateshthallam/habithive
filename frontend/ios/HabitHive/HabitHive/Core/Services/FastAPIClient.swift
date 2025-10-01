@@ -474,7 +474,7 @@ final class FastAPIClient: ObservableObject {
             requiresAuth: true
         )
 
-        return Habit(
+        var habit = Habit(
             id: habitResponse.id.uuidString,
             userId: habitResponse.user_id.uuidString,
             name: habitResponse.name,
@@ -499,6 +499,10 @@ final class FastAPIClient: ObservableObject {
                 )
             } ?? []
         )
+
+        habit.currentStreak = habitResponse.current_streak
+        habit.completionRate = habitResponse.completion_rate
+        return habit
     }
 
     func getHabitLogs(habitId: String, startDate: Date? = nil, endDate: Date? = nil) async throws -> [HabitLog] {
