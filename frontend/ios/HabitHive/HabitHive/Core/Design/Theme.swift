@@ -32,11 +32,34 @@ enum AppTheme: String, CaseIterable {
     var backgroundColor: Color {
         switch self {
         case .honey:
-            return Color(hex: "#FAFAFA") // Light gray background like in mocks
+            return Color(hex: "#FAFAFA") // Neutral background
         case .mint:
             return Color(hex: "#F0FFF4")
         case .night:
             return Color(hex: "#121212")
+        }
+    }
+
+    var backgroundGradient: LinearGradient {
+        switch self {
+        case .honey:
+            return LinearGradient(
+                colors: [Color(hex: "#FAFAFA"), Color(hex: "#FDFDFD")],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        case .mint:
+            return LinearGradient(
+                colors: [Color(hex: "#F0FFF4"), Color(hex: "#F7FFFA")],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        case .night:
+            return LinearGradient(
+                colors: [Color(hex: "#121212"), Color(hex: "#1A1A1A")],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
     }
 
@@ -52,7 +75,7 @@ enum AppTheme: String, CaseIterable {
     var primaryTextColor: Color {
         switch self {
         case .honey, .mint:
-            return Color(hex: "#1C1C1E") // Dark text for light themes
+            return Color(hex: "#111827") // Dark gray, not pure black
         case .night:
             return Color.white
         }
@@ -61,7 +84,7 @@ enum AppTheme: String, CaseIterable {
     var secondaryTextColor: Color {
         switch self {
         case .honey, .mint:
-            return Color(hex: "#1C1C1E").opacity(0.6) // Dark text with opacity
+            return Color(hex: "#6B7280") // Medium gray for labels
         case .night:
             return Color.white.opacity(0.6)
         }
@@ -90,22 +113,37 @@ class ThemeManager: ObservableObject {
 
 // MARK: - Design System Colors
 struct HiveColors {
-    // Primary Colors
-    static let honeyGradientStart = Color(hex: "#FFD166")
-    static let honeyGradientEnd = Color(hex: "#FF9F1C")
-    static let mintSuccess = Color(hex: "#34C759")
-    static let beeBlack = Color(hex: "#1C1C1E")
-    static let creamBase = Color(hex: "#FFF6E6")
-    static let skyAccent = Color(hex: "#5AC8FA")
-    static let slateText = Color(hex: "#1C1C1E")
+    // Primary Colors (Updated palette)
+    static let honeyPrimary = Color(hex: "#FFC93C") // Primary honey-yellow highlight
+    static let honeyGradientStart = Color(hex: "#FFC93C")
+    static let honeyGradientEnd = Color(hex: "#FFB703")
+    static let mintSuccess = Color(hex: "#34D399") // Updated green with gradient
+    static let mintGradientStart = Color(hex: "#4ECDC4")
+    static let mintGradientEnd = Color(hex: "#34D399")
+
+    // Secondary Accents
+    static let tealAccent = Color(hex: "#4ECDC4") // Light teal for contrast
+    static let coralAccent = Color(hex: "#FF6B6B") // Warm coral for alerts
+
+    // Text Colors
+    static let primaryText = Color(hex: "#111827") // Dark gray, not pure black
+    static let secondaryText = Color(hex: "#6B7280") // Medium gray for labels
+    static let beeBlack = Color(hex: "#111827") // Updated to match new primary text
+    static let slateText = Color(hex: "#6B7280")
+
+    // Background Colors
+    static let backgroundStart = Color(hex: "#FAFAFA")
+    static let backgroundEnd = Color(hex: "#FDFDFD")
+    static let creamBase = Color(hex: "#FAFAFA") // Updated to neutral
+    static let skyAccent = Color(hex: "#4ECDC4") // Updated to teal
 
     // Neutral Grays
     static let cardBackground = Color.white
-    static let borderColor = Color(hex: "#E5E5EA")
+    static let borderColor = Color(hex: "#E5E7EB") // Slightly lighter border
     static let lightGray = Color(hex: "#F2F2F7")
 
     // Semantic Colors
-    static let error = Color(hex: "#FF3B30")
+    static let error = Color(hex: "#FF3B30") // Red only for errors
     static let warning = Color(hex: "#FF9500")
     static let success = mintSuccess
 
@@ -132,23 +170,33 @@ struct HiveColors {
     ]
 }
 
-// MARK: - Typography
+// MARK: - Typography (SF Pro Rounded for approachable feel)
 struct HiveTypography {
-    // Titles (SF Pro Display)
-    static let largeTitle = Font.system(size: 28, weight: .bold, design: .default)
-    static let title = Font.system(size: 24, weight: .semibold, design: .default)
-    static let title2 = Font.system(size: 24, weight: .semibold, design: .default)
-    static let title3 = Font.system(size: 20, weight: .semibold, design: .default)
-    // Body (SF Pro Text)
-    static let body = Font.system(size: 16, weight: .regular, design: .default)
-    static let callout = Font.system(size: 16, weight: .medium, design: .default)
-    static let subheadline = Font.system(size: 15, weight: .regular, design: .default)
-    static let headline = Font.system(size: 17, weight: .semibold, design: .default)
+    // Headings (Bold, size 22-24)
+    static let largeTitle = Font.system(size: 28, weight: .bold, design: .rounded)
+    static let title = Font.system(size: 24, weight: .bold, design: .rounded)
+    static let title2 = Font.system(size: 22, weight: .bold, design: .rounded)
+    static let title3 = Font.system(size: 20, weight: .semibold, design: .rounded)
+
+    // Body Text (Regular, size 14-15)
+    static let body = Font.system(size: 15, weight: .regular, design: .rounded)
+    static let callout = Font.system(size: 16, weight: .medium, design: .rounded)
+    static let subheadline = Font.system(size: 15, weight: .regular, design: .rounded)
+    static let headline = Font.system(size: 17, weight: .semibold, design: .rounded)
+
+    // Labels (Medium, size 15-16)
+    static let label = Font.system(size: 16, weight: .medium, design: .rounded)
+    static let labelSmall = Font.system(size: 15, weight: .medium, design: .rounded)
+
     // Captions
-    static let caption = Font.system(size: 13, weight: .medium, design: .default)
-    static let caption2 = Font.system(size: 11, weight: .medium, design: .default)
-    // Mono for numbers (optional)
+    static let caption = Font.system(size: 13, weight: .medium, design: .rounded)
+    static let caption2 = Font.system(size: 11, weight: .medium, design: .rounded)
+
+    // Numbers / Metrics (Bigger + bold, monospace for consistency)
+    static let metricLarge = Font.system(size: 28, weight: .bold, design: .rounded)
+    static let metricMedium = Font.system(size: 24, weight: .bold, design: .rounded)
     static let streakNumber = Font.system(size: 36, weight: .bold, design: .monospaced)
+    static let statNumber = Font.system(size: 32, weight: .bold, design: .monospaced)
 }
 
 // MARK: - Spacing & Sizing
@@ -163,11 +211,22 @@ struct HiveSpacing {
 }
 
 struct HiveRadius {
-    static let small: CGFloat = 6
+    static let small: CGFloat = 8
     static let medium: CGFloat = 12
-    static let large: CGFloat = 16   // cards
+    static let large: CGFloat = 16   // standard cards
+    static let card: CGFloat = 20    // primary cards (updated)
     static let xlarge: CGFloat = 24
     static let modal: CGFloat = 28   // modals
+}
+
+// MARK: - Shadows
+struct HiveShadow {
+    // Soft card shadow: 0 2px 6px rgba(0,0,0,0.05)
+    static let card = (color: Color.black.opacity(0.05), radius: CGFloat(6), x: CGFloat(0), y: CGFloat(2))
+    // Medium shadow for elevated elements
+    static let elevated = (color: Color.black.opacity(0.08), radius: CGFloat(12), x: CGFloat(0), y: CGFloat(4))
+    // Strong shadow for modals
+    static let modal = (color: Color.black.opacity(0.15), radius: CGFloat(20), x: CGFloat(0), y: CGFloat(10))
 }
 
 // MARK: - Color Extension

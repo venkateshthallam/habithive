@@ -1,5 +1,19 @@
 import Foundation
 
+/*
+ API Configuration:
+
+ To switch between production and local development:
+ 1. Change `useProduction` flag below:
+    - `true` = Production (Railway)
+    - `false` = Local testing
+
+ 2. Update `localURL` with your local machine's IP address
+    (Find it with: ipconfig getifaddr en0 on Mac)
+
+ The app will print which URL it's using in the console when it starts.
+ */
+
 enum SupabaseConfiguration {
     private static let urlKey = "SUPABASE_URL"
     private static let anonKeyKey = "SUPABASE_ANON_KEY"
@@ -7,17 +21,33 @@ enum SupabaseConfiguration {
     private static let authUrlKey = "SUPABASE_AUTH_URL"
     private static let restUrlKey = "SUPABASE_REST_URL"
 
+    // MARK: - API Environment Configuration
+    // 🔧 CHANGE THIS TO SWITCH ENVIRONMENTS 🔧
+    private static let useProduction = true  // Set to true for production, false for local testing
+
+    private static let productionURL = "https://habithive-production.up.railway.app"
+    private static let localURL = "http://192.168.4.121:8002"  // Update this with your local IP
+
+    // API paths are already prefixed with /api in the client calls, so no need to add here
+
     static var url: URL {
+        // 1. Check Info.plist
         if let raw = Bundle.main.object(forInfoDictionaryKey: urlKey) as? String,
            let url = URL(string: raw), !raw.isEmpty {
+            print("🌐 Using API URL from Info.plist: \(url.absoluteString)")
             return url
         }
+        // 2. Check environment variables
         if let raw = ProcessInfo.processInfo.environment[urlKey],
            let url = URL(string: raw), !raw.isEmpty {
+            print("🌐 Using API URL from environment: \(url.absoluteString)")
             return url
         }
-        // FastAPI backend URL - using actual machine IP for iOS simulator
-        return URL(string: "http://192.168.4.121:8002")!
+        // 3. Use compile-time configuration
+        let urlString = useProduction ? productionURL : localURL
+        let url = URL(string: urlString)!
+        print("🌐 Using \(useProduction ? "PRODUCTION" : "LOCAL") API: \(url.absoluteString)")
+        return url
     }
 
     static var anonKey: String {

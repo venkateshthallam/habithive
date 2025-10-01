@@ -837,7 +837,7 @@ struct InsightsView: View {
                 value: "\(streak)",
                 subtitle: "Best habit",
                 gradient: LinearGradient(
-                    colors: [Color(hex: "#FF6F61"), Color(hex: "#FF9472")],
+                    colors: [HiveColors.coralAccent, Color(hex: "#FF9472")],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -980,24 +980,24 @@ private struct InsightStatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: HiveSpacing.sm) {
             Text(title)
-                .font(HiveTypography.caption)
-                .foregroundColor(.white.opacity(0.8))
+                .font(HiveTypography.labelSmall)
+                .foregroundColor(.white.opacity(0.85))
 
             Text(value)
-                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .font(HiveTypography.statNumber)
                 .foregroundColor(.white)
 
             Text(subtitle)
                 .font(HiveTypography.caption)
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(.white.opacity(0.85))
         }
         .padding(HiveSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             gradient
-                .cornerRadius(HiveRadius.large)
+                .cornerRadius(HiveRadius.card)
         )
-        .shadow(color: HiveColors.honeyGradientEnd.opacity(0.25), radius: 10, x: 0, y: 6)
+        .shadow(color: HiveShadow.elevated.color, radius: HiveShadow.elevated.radius, x: HiveShadow.elevated.x, y: HiveShadow.elevated.y)
     }
 }
 

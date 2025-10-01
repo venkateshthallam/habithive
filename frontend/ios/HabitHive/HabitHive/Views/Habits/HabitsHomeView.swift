@@ -325,13 +325,13 @@ struct HabitCardView: View {
         }
         .padding(HiveSpacing.lg)
         .background(
-            RoundedRectangle(cornerRadius: HiveRadius.large)
+            RoundedRectangle(cornerRadius: HiveRadius.card)
                 .fill(theme.cardBackgroundColor)
-                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.08), radius: 18, x: 0, y: 12)
+                .shadow(color: HiveShadow.card.color, radius: HiveShadow.card.radius, x: HiveShadow.card.x, y: HiveShadow.card.y)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: HiveRadius.large)
-                .stroke(theme == .night ? Color.white.opacity(0.08) : HiveColors.borderColor.opacity(0.6), lineWidth: 1)
+            RoundedRectangle(cornerRadius: HiveRadius.card)
+                .stroke(theme == .night ? Color.white.opacity(0.05) : HiveColors.borderColor.opacity(0.4), lineWidth: 0.5)
         )
         .contentShape(RoundedRectangle(cornerRadius: HiveRadius.large))
         .onTapGesture { onOpen() }
