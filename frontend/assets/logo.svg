@@ -1,0 +1,37 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- HabitHive App Icon -->
+  <rect width="1024" height="1024" rx="230" fill="url(#gradient)"/>
+
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700" />
+      <stop offset="100%" style="stop-color:#FFA500" />
+    </linearGradient>
+  </defs>
+
+  <!-- Hexagon -->
+  <path d="M256 341 L256 683 L512 854 L768 683 L768 341 L512 170 Z"
+        fill="rgba(255,255,255,0.2)" />
+
+  <!-- Bee Body -->
+  <ellipse cx="512" cy="480" rx="150" ry="180" fill="#2D2D2D"/>
+
+  <!-- Stripes -->
+  <rect x="362" y="420" width="300" height="40" fill="#FFD700"/>
+  <rect x="362" y="490" width="300" height="40" fill="#FFD700"/>
+  <rect x="362" y="560" width="300" height="40" fill="#FFD700"/>
+
+  <!-- Wings -->
+  <ellipse cx="380" cy="420" rx="100" ry="60" fill="rgba(255,255,255,0.85)" transform="rotate(-20 380 420)"/>
+  <ellipse cx="644" cy="420" rx="100" ry="60" fill="rgba(255,255,255,0.85)" transform="rotate(20 644 420)"/>
+
+  <!-- Eyes -->
+  <circle cx="462" cy="440" r="25" fill="white"/>
+  <circle cx="562" cy="440" r="25" fill="white"/>
+  <circle cx="462" cy="440" r="16" fill="black"/>
+  <circle cx="562" cy="440" r="16" fill="black"/>
+
+  <!-- Honey Drops -->
+  <circle cx="350" cy="720" r="20" fill="rgba(255,255,255,0.4)"/>
+  <circle cx="674" cy="720" r="20" fill="rgba(255,255,255,0.4)"/>
+</svg>

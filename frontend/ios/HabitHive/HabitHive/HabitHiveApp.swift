@@ -10,7 +10,8 @@ import SwiftUI
 @main
 struct HabitHiveApp: App {
     @StateObject private var apiClient = FastAPIClient.shared
-    
+    @State private var showSplash = true
+
     init() {
         // Improve tab bar contrast and visibility
         let appearance = UITabBarAppearance()
@@ -22,26 +23,39 @@ struct HabitHiveApp: App {
         }
         UITabBar.appearance().unselectedItemTintColor = UIColor(named: "BeeBlack") ?? UIColor(red: 0.11, green: 0.11, blue: 0.11, alpha: 0.65)
     }
-    
+
     var body: some Scene {
         WindowGroup {
-            Group {
-                if apiClient.isAuthenticated {
-                    if !apiClient.hasLoadedProfile {
-                        ProgressView("Loading your hive…")
-                            .progressViewStyle(.circular)
-                            .tint(HiveColors.honeyGradientEnd)
-                    } else if apiClient.requiresProfileSetup {
-                        ProfileSetupFlowView()
+            ZStack {
+                Group {
+                    if apiClient.isAuthenticated {
+                        if !apiClient.hasLoadedProfile {
+                            SplashScreenView()
+                        } else if apiClient.requiresProfileSetup {
+                            ProfileSetupFlowView()
+                        } else {
+                            MainTabView()
+                        }
                     } else {
-                        MainTabView()
+                        WelcomeView()
                     }
-                } else {
-                    WelcomeView()
+                }
+                .task(id: apiClient.isAuthenticated) {
+                    await apiClient.bootstrapIfNeeded()
+                }
+
+                if showSplash {
+                    SplashScreenView()
+                        .transition(.opacity)
+                        .zIndex(1)
                 }
             }
-            .task(id: apiClient.isAuthenticated) {
-                await apiClient.bootstrapIfNeeded()
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    withAnimation(.easeOut(duration: 0.5)) {
+                        showSplash = false
+                    }
+                }
             }
         }
     }
