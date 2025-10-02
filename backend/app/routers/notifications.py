@@ -8,7 +8,7 @@ from typing import Dict, Any, List
 from pydantic import BaseModel
 from datetime import datetime
 from app.core.auth import get_current_user, verify_service_key
-from app.core.supabase import get_supabase_service_client
+from app.core.supabase import get_supabase_admin
 from app.core.onesignal import onesignal_client
 import logging
 
@@ -34,7 +34,7 @@ async def send_reminders(
     This endpoint is called by pg_cron every minute.
     Protected by service key authentication.
     """
-    supabase = get_supabase_service_client()
+    supabase = get_supabase_admin()
     total_habits = 0
     sent = 0
     failed = 0
@@ -157,7 +157,7 @@ async def send_test_notification(
     user_id = current_user["id"]
 
     try:
-        supabase = get_supabase_service_client()
+        supabase = get_supabase_admin()
 
         # Get user's OneSignal player IDs
         response = supabase.table("device_tokens")\
@@ -240,7 +240,7 @@ async def get_notification_logs(
     user_id = current_user["id"]
 
     try:
-        supabase = get_supabase_service_client()
+        supabase = get_supabase_admin()
 
         response = supabase.table("notification_logs")\
             .select("*")\
