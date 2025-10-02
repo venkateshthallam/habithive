@@ -364,6 +364,8 @@ final class FastAPIClient: ObservableObject {
                 targetPerDay: habitResponse.target_per_day,
                 scheduleDaily: habitResponse.schedule_daily,
                 scheduleWeekmask: habitResponse.schedule_weekmask,
+                reminderEnabled: habitResponse.reminder_enabled,
+                reminderTime: habitResponse.reminder_time,
                 isActive: habitResponse.is_active,
                 createdAt: habitResponse.created_at,
                 updatedAt: habitResponse.updated_at,
@@ -396,6 +398,8 @@ final class FastAPIClient: ObservableObject {
             targetPerDay: habitResponse.target_per_day,
             scheduleDaily: habitResponse.schedule_daily,
             scheduleWeekmask: habitResponse.schedule_weekmask,
+            reminderEnabled: habitResponse.reminder_enabled,
+            reminderTime: habitResponse.reminder_time,
             isActive: habitResponse.is_active,
             createdAt: habitResponse.created_at,
             updatedAt: habitResponse.updated_at
@@ -484,6 +488,8 @@ final class FastAPIClient: ObservableObject {
             targetPerDay: habitResponse.target_per_day,
             scheduleDaily: habitResponse.schedule_daily,
             scheduleWeekmask: habitResponse.schedule_weekmask,
+            reminderEnabled: habitResponse.reminder_enabled,
+            reminderTime: habitResponse.reminder_time,
             isActive: habitResponse.is_active,
             createdAt: habitResponse.created_at,
             updatedAt: habitResponse.updated_at,
@@ -1016,6 +1022,8 @@ private struct HabitResponse: Decodable {
     let target_per_day: Int
     let schedule_daily: Bool
     let schedule_weekmask: Int
+    let reminder_enabled: Bool
+    let reminder_time: String?
     let is_active: Bool
     let created_at: Date
     let updated_at: Date
@@ -1031,6 +1039,8 @@ private struct HabitWithLogsResponse: Decodable {
     let target_per_day: Int
     let schedule_daily: Bool
     let schedule_weekmask: Int
+    let reminder_enabled: Bool
+    let reminder_time: String?
     let is_active: Bool
     let created_at: Date
     let updated_at: Date

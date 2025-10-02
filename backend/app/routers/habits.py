@@ -214,6 +214,10 @@ async def create_habit(
             "user_id": user_id,
             **habit.dict()
         }
+        reminder_time = habit_data.get("reminder_time")
+        if isinstance(reminder_time, datetime_time):
+            habit_data["reminder_time"] = reminder_time.strftime("%H:%M:%S")
+
         response = supabase.table("habits").insert(habit_data).execute()
         return Habit(**response.data[0])
     except Exception as e:
@@ -330,6 +334,8 @@ async def update_habit(
     try:
         supabase = get_user_supabase_client(current_user)
         update_data = update.dict(exclude_unset=True)
+        if "reminder_time" in update_data and isinstance(update_data["reminder_time"], datetime_time):
+            update_data["reminder_time"] = update_data["reminder_time"].strftime("%H:%M:%S")
         update_data["updated_at"] = datetime.utcnow().isoformat()
         
         response = supabase.table("habits").update(update_data).eq("id", habit_id).eq("user_id", user_id).execute()

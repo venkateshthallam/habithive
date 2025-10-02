@@ -75,6 +75,8 @@ class HabitBase(BaseModel):
     target_per_day: int = Field(1, gt=0)
     schedule_daily: bool = True
     schedule_weekmask: int = Field(127, ge=0, le=127)  # Mon-Sun bitmask
+    reminder_enabled: bool = False
+    reminder_time: Optional[time] = None
     
     @field_validator('color_hex')
     @classmethod
@@ -97,6 +99,8 @@ class HabitUpdate(BaseModel):
     schedule_daily: Optional[bool] = None
     schedule_weekmask: Optional[int] = Field(None, ge=0, le=127)
     is_active: Optional[bool] = None
+    reminder_enabled: Optional[bool] = None
+    reminder_time: Optional[time] = None
 
 class Habit(HabitBase):
     id: UUID

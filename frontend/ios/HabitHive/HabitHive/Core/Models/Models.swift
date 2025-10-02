@@ -53,6 +53,8 @@ struct Habit: Codable, Identifiable {
     var targetPerDay: Int
     var scheduleDaily: Bool
     var scheduleWeekmask: Int
+    var reminderEnabled: Bool = false
+    var reminderTime: String?
     var isActive: Bool
     let createdAt: Date
     var updatedAt: Date
@@ -72,6 +74,8 @@ struct Habit: Codable, Identifiable {
         case targetPerDay = "target_per_day"
         case scheduleDaily = "schedule_daily"
         case scheduleWeekmask = "schedule_weekmask"
+        case reminderEnabled = "reminder_enabled"
+        case reminderTime = "reminder_time"
         case isActive = "is_active"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -461,6 +465,8 @@ struct CreateHabitRequest: Codable {
     let targetPerDay: Int
     let scheduleDaily: Bool
     let scheduleWeekmask: Int
+    let reminderEnabled: Bool
+    let reminderTime: String?
     
     enum CodingKeys: String, CodingKey {
         case name
@@ -470,6 +476,8 @@ struct CreateHabitRequest: Codable {
         case targetPerDay = "target_per_day"
         case scheduleDaily = "schedule_daily"
         case scheduleWeekmask = "schedule_weekmask"
+        case reminderEnabled = "reminder_enabled"
+        case reminderTime = "reminder_time"
     }
 }
 

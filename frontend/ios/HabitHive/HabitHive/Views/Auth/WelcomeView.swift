@@ -17,19 +17,8 @@ struct WelcomeView: View {
 
                 // App Logo and Title
                 VStack(spacing: HiveSpacing.md) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.18))
-                            .frame(width: 130, height: 130)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
-                            )
-                            .shadow(color: .black.opacity(0.15), radius: 18, x: 0, y: 10)
-
-                        Text("🐝")
-                            .font(.system(size: 64))
-                    }
+                    BeeLogoView()
+                        .frame(width: 200, height: 200)
 
                     VStack(spacing: HiveSpacing.xs) {
                         Text("HabitHive")

@@ -331,7 +331,17 @@ class CreateHabitViewModel: ObservableObject {
         if emoji.isEmpty {
             emoji = "🎯"
         }
-        
+
+        let reminderTimeString: String?
+        if reminderEnabled {
+            let components = Calendar.current.dateComponents([.hour, .minute], from: reminderTime)
+            let hour = components.hour ?? 0
+            let minute = components.minute ?? 0
+            reminderTimeString = String(format: "%02d:%02d:00", hour, minute)
+        } else {
+            reminderTimeString = nil
+        }
+
         let request = CreateHabitRequest(
             name: name,
             emoji: emoji,
@@ -339,7 +349,9 @@ class CreateHabitViewModel: ObservableObject {
             type: type,
             targetPerDay: targetPerDay,
             scheduleDaily: scheduleDaily,
-            scheduleWeekmask: scheduleWeekmask
+            scheduleWeekmask: scheduleWeekmask,
+            reminderEnabled: reminderEnabled,
+            reminderTime: reminderTimeString
         )
         
         print("📝 Creating habit: \(name) with emoji: \(emoji) and color: \(colorHex)")

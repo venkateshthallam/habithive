@@ -195,6 +195,9 @@
 			);
 			mainGroup = AC6BD50F2E772B8800134CCB;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				ACBC72CB2E8E0CCB0053E9D7 /* XCRemoteSwiftPackageReference "OneSignal-iOS-SDK" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AC6BD5192E772B8800134CCB /* Products */;
 			projectDirPath = "";
@@ -574,6 +577,17 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		ACBC72CB2E8E0CCB0053E9D7 /* XCRemoteSwiftPackageReference "OneSignal-iOS-SDK" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/OneSignal/OneSignal-iOS-SDK";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.2.14;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = AC6BD5102E772B8800134CCB /* Project object */;
 }
