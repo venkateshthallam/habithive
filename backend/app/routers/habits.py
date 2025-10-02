@@ -366,25 +366,36 @@ async def delete_habit(
         if habit["user_id"] != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
         
-        # Soft delete
-        habit["is_active"] = False
-        habit["updated_at"] = datetime.utcnow()
+        # Hard delete in test mode
+        del test_habits[habit_id]
+        to_remove = [log_id for log_id, log in test_logs.items() if log["habit_id"] == habit_id]
+        for log_id in to_remove:
+            test_logs.pop(log_id, None)
         
-        return {"success": True, "message": "Habit archived"}
+        return {"success": True, "message": "Habit deleted"}
     
     try:
         supabase = get_user_supabase_client(current_user)
         
-        # Soft delete by setting is_active to false
-        response = supabase.table("habits").update({
-            "is_active": False,
-            "updated_at": datetime.utcnow().isoformat()
-        }).eq("id", habit_id).eq("user_id", user_id).execute()
-        
-        if not response.data:
+        exists = (
+            supabase
+            .table("habits")
+            .select("id")
+            .eq("id", habit_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+
+        if getattr(exists, "data", None) is None:
             raise HTTPException(status_code=404, detail="Habit not found")
-        
-        return {"success": True, "message": "Habit archived"}
+
+        response = supabase.table("habits").delete().eq("id", habit_id).eq("user_id", user_id).execute()
+
+        if getattr(response, "error", None):
+            raise HTTPException(status_code=500, detail=response.error.get("message", "Failed to delete habit"))
+
+        return {"success": True, "message": "Habit deleted"}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

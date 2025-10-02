@@ -41,6 +41,12 @@ struct HabitsHomeView: View {
                                         onLog: {
                                             handleBeeButtonTap(habit)
                                         },
+                                        onIncrement: {
+                                            handleCounterIncrement(habit)
+                                        },
+                                        onDecrement: {
+                                            handleCounterDecrement(habit)
+                                        },
                                         onOpen: {
                                             selectedHabit = habit
                                         },
@@ -218,7 +224,47 @@ struct HabitsHomeView: View {
     private func handleHabitLongPress(_ habit: Habit) {
         selectedHabit = habit
     }
-    
+
+    private func handleCounterIncrement(_ habit: Habit) {
+        guard habit.type == .counter else { return }
+        let todayLog = viewModel.todayLog(for: habit.id)
+        let currentValue = todayLog?.value ?? 0
+        let newValue = min(currentValue + 1, habit.targetPerDay)
+
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+
+        viewModel.optimisticToggle(habit: habit, value: newValue, adding: true)
+        viewModel.logHabit(habitId: habit.id, value: newValue)
+    }
+
+    private func handleCounterDecrement(_ habit: Habit) {
+        guard habit.type == .counter else { return }
+        let todayLog = viewModel.todayLog(for: habit.id)
+        let currentValue = todayLog?.value ?? 0
+
+        guard currentValue > 0 else { return }
+
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+
+        let newValue = currentValue - 1
+
+        if newValue == 0 {
+            // Delete the log if value reaches 0
+            let removed = viewModel.optimisticToggle(habit: habit, value: newValue, adding: false)
+            if removed {
+                viewModel.deleteHabitLog(habitId: habit.id, logDateString: todayLog!.logDate)
+            }
+        } else {
+            // Update with new value
+            viewModel.optimisticToggle(habit: habit, value: newValue, adding: true)
+            viewModel.logHabit(habitId: habit.id, value: newValue)
+        }
+    }
+
 }
 
 // MARK: - Habit Card View
@@ -227,6 +273,8 @@ struct HabitCardView: View {
     let todayKey: String
     let theme: AppTheme
     let onLog: () -> Void
+    let onIncrement: () -> Void
+    let onDecrement: () -> Void
     let onOpen: () -> Void
     let onLongPress: () -> Void
 
@@ -292,6 +340,11 @@ struct HabitCardView: View {
                     isComplete: isCompletedToday,
                     accentColor: habit.color,
                     theme: theme,
+                    habitType: habit.type,
+                    currentValue: todaysLog?.value ?? 0,
+                    targetValue: habit.targetPerDay,
+                    onIncrement: onIncrement,
+                    onDecrement: onDecrement,
                     action: onLog
                 )
             }
@@ -346,11 +399,65 @@ struct BeeButton: View {
     let isComplete: Bool
     let accentColor: Color
     let theme: AppTheme
-    let action: () -> Void
+    let habitType: HabitType
+    let currentValue: Int
+    let targetValue: Int
+    let onIncrement: () -> Void
+    let onDecrement: () -> Void
+    let onToggle: () -> Void
 
     @State private var isPressed = false
+    @State private var showStepper = false
+
+    init(
+        isComplete: Bool,
+        accentColor: Color,
+        theme: AppTheme,
+        habitType: HabitType = .checkbox,
+        currentValue: Int = 0,
+        targetValue: Int = 1,
+        onIncrement: @escaping () -> Void = {},
+        onDecrement: @escaping () -> Void = {},
+        action: @escaping () -> Void
+    ) {
+        self.isComplete = isComplete
+        self.accentColor = accentColor
+        self.theme = theme
+        self.habitType = habitType
+        self.currentValue = currentValue
+        self.targetValue = targetValue
+        self.onIncrement = onIncrement
+        self.onDecrement = onDecrement
+        self.onToggle = action
+    }
 
     var body: some View {
+        Group {
+            if habitType == .counter && showStepper {
+                CounterStepperView(
+                    currentValue: currentValue,
+                    targetValue: targetValue,
+                    accentColor: accentColor,
+                    theme: theme,
+                    onIncrement: {
+                        onIncrement()
+                    },
+                    onDecrement: {
+                        onDecrement()
+                    },
+                    onDismiss: {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            showStepper = false
+                        }
+                    }
+                )
+            } else {
+                checkboxButton
+            }
+        }
+    }
+
+    private var checkboxButton: some View {
         Button {
             #if canImport(UIKit)
             UIImpactFeedbackGenerator(style: .soft).impactOccurred()
@@ -363,7 +470,14 @@ struct BeeButton: View {
                     isPressed = false
                 }
             }
-            action()
+
+            if habitType == .counter {
+                withAnimation(.easeIn(duration: 0.2)) {
+                    showStepper = true
+                }
+            } else {
+                onToggle()
+            }
         } label: {
             ZStack {
                 Circle()
@@ -392,11 +506,21 @@ struct BeeButton: View {
                     )
                     .shadow(color: isComplete ? HiveColors.honeyGradientEnd.opacity(0.35) : Color.black.opacity(theme == .night ? 0.35 : 0.1), radius: 10, x: 0, y: 6)
 
-                if isComplete {
+                if isComplete && habitType == .checkbox {
                     Image(systemName: "checkmark")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.white)
                         .transition(.scale)
+                } else if habitType == .counter {
+                    VStack(spacing: 2) {
+                        Text("\(currentValue)")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(isComplete ? .white : accentColor)
+                        Text("/\(targetValue)")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(isComplete ? .white.opacity(0.8) : accentColor.opacity(0.7))
+                    }
+                    .transition(.scale)
                 } else {
                     Text("🐝")
                         .font(.system(size: 22))
@@ -407,6 +531,95 @@ struct BeeButton: View {
         .buttonStyle(.plain)
         .scaleEffect(isPressed ? 0.9 : 1.0)
         .accessibilityLabel(isComplete ? "Habit logged for today" : "Log habit")
+    }
+}
+
+// MARK: - Counter Stepper View
+struct CounterStepperView: View {
+    let currentValue: Int
+    let targetValue: Int
+    let accentColor: Color
+    let theme: AppTheme
+    let onIncrement: () -> Void
+    let onDecrement: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: HiveSpacing.md) {
+            // Decrement Button
+            Button {
+                #if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                #endif
+                onDecrement()
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .font(.system(size: 32, weight: .medium))
+                    .foregroundStyle(
+                        currentValue > 0 ? accentColor : theme.secondaryTextColor.opacity(0.3)
+                    )
+            }
+            .disabled(currentValue <= 0)
+            .buttonStyle(.plain)
+
+            // Value Display
+            VStack(spacing: 2) {
+                Text("\(currentValue)")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(theme.primaryTextColor)
+                Text("/ \(targetValue)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(theme.secondaryTextColor)
+            }
+            .frame(minWidth: 50)
+
+            // Increment Button
+            Button {
+                #if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                #endif
+                onIncrement()
+            } label: {
+                Group {
+                    if currentValue < targetValue {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 32, weight: .medium))
+                            .foregroundStyle(theme.primaryGradient)
+                    } else {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 32, weight: .medium))
+                            .foregroundColor(theme.secondaryTextColor.opacity(0.3))
+                    }
+                }
+            }
+            .disabled(currentValue >= targetValue)
+            .buttonStyle(.plain)
+
+            // Done Button
+            Button {
+                #if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                #endif
+                onDismiss()
+            } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 32, weight: .medium))
+                    .foregroundStyle(HiveColors.honeyGradientStart, HiveColors.honeyGradientEnd)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, HiveSpacing.md)
+        .padding(.vertical, HiveSpacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.xlarge)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: HiveShadow.card.color, radius: HiveShadow.card.radius * 1.5, x: 0, y: HiveShadow.card.y * 1.5)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: HiveRadius.xlarge)
+                .stroke(accentColor.opacity(0.2), lineWidth: 1)
+        )
+        .transition(.scale.combined(with: .opacity))
     }
 }
 

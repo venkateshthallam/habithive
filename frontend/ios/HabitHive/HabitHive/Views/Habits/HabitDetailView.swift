@@ -6,7 +6,6 @@ struct HabitDetailView: View {
     @StateObject private var viewModel = HabitDetailViewModel()
     @StateObject private var themeManager = ThemeManager.shared
     @State private var selectedMonth = Date()
-    @State private var showEditSheet = false
     @State private var showDeleteAlert = false
     @State private var currentHabit: Habit
 
@@ -38,7 +37,7 @@ struct HabitDetailView: View {
                     .padding(HiveSpacing.md)
                 }
             }
-            .navigationTitle(currentHabit.name)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -47,12 +46,11 @@ struct HabitDetailView: View {
                     }
                 }
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showEditSheet = true
-                    }) {
-                        Image(systemName: "pencil")
-                    }
+                ToolbarItem(placement: .principal) {
+                    Text(currentHabit.name)
+                        .font(HiveTypography.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(HiveColors.slateText)
                 }
             }
         }
@@ -105,7 +103,13 @@ struct HabitDetailView: View {
                 Text(currentHabit.emoji ?? "🎯")
                     .font(.system(size: 50))
             }
-            
+
+            Text(currentHabit.name)
+                .font(HiveTypography.title2)
+                .fontWeight(.semibold)
+                .foregroundColor(HiveColors.slateText)
+                .multilineTextAlignment(.center)
+
             // Today's Status
             if currentHabit.type == .counter {
                 VStack(spacing: HiveSpacing.xs) {
