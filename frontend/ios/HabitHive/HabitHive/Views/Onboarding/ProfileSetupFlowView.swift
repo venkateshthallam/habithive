@@ -153,14 +153,8 @@ struct ProfileSetupFlowView: View {
 
     private func requestNotifications() async {
         hasRequestedNotifications = true
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
-                DispatchQueue.main.async {
-                    self.notificationsEnabled = granted
-                    continuation.resume(returning: ())
-                }
-            }
-        }
+        let granted = await NotificationManager.shared.requestPermissionAndRegister()
+        notificationsEnabled = granted
     }
 
     private func requestContactsAndUpload() async {

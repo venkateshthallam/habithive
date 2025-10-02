@@ -6,10 +6,13 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 @main
 struct HabitHiveApp: App {
     @StateObject private var apiClient = FastAPIClient.shared
+    @StateObject private var notificationManager = NotificationManager.shared
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var showSplash = true
 
     init() {
@@ -56,7 +59,63 @@ struct HabitHiveApp: App {
                         showSplash = false
                     }
                 }
+
+                // Set notification delegate
+                UNUserNotificationCenter.current().delegate = notificationManager
+
+                // Check if we need to register for push notifications
+                Task {
+                    await setupNotifications()
+                }
             }
+        }
+    }
+
+    private func setupNotifications() async {
+        // Check current permission status
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+
+        print("🔔 Notification permission status: \(settings.authorizationStatus.rawValue)")
+
+        if settings.authorizationStatus == .authorized {
+            // Permission already granted, make sure we're registered
+            print("🔔 Permission already granted, registering for remote notifications...")
+            await notificationManager.registerForPushNotifications()
+        }
+
+        // Re-register device if we have a token but haven't registered with backend
+        await notificationManager.reregisterIfNeeded()
+    }
+}
+
+// MARK: - AppDelegate
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil
+    ) -> Bool {
+        print("🚀 App launched")
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        print("✅ APNs registration successful!")
+        Task { @MainActor in
+            NotificationManager.shared.handleDeviceToken(deviceToken)
+        }
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        print("❌ APNs registration failed: \(error.localizedDescription)")
+        Task { @MainActor in
+            NotificationManager.shared.handleRegistrationError(error)
         }
     }
 }

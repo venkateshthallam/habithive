@@ -122,13 +122,24 @@ async def verify_service_key(x_service_key: str = Header(...)) -> bool:
     Raises:
         HTTPException if invalid
     """
-    if not settings.INTERNAL_SERVICE_KEY:
+    provided_key = x_service_key.strip()
+
+    valid_keys = set()
+
+    if settings.INTERNAL_SERVICE_KEY:
+        valid_keys.add(settings.INTERNAL_SERVICE_KEY.strip())
+
+    # Allow falling back to the Supabase service role key so pg_cron can reuse it
+    if settings.SUPABASE_SERVICE_KEY:
+        valid_keys.add(settings.SUPABASE_SERVICE_KEY.strip())
+
+    if not valid_keys:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Service key not configured"
         )
 
-    if x_service_key != settings.INTERNAL_SERVICE_KEY:
+    if provided_key not in valid_keys:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid service key"

@@ -4,9 +4,30 @@
 -- Enable pg_cron extension (requires superuser/admin)
 create extension if not exists pg_cron;
 
--- Enable http extension for making HTTP requests (requires superuser/admin)
--- Note: On Supabase, this is automatically available via the `net` schema
--- If running locally, you may need: CREATE EXTENSION http;
+-- Enable pg_net extension for making HTTP requests
+create extension if not exists pg_net schema extensions;
+
+-- Create net schema wrapper if it doesn't exist
+do $$
+begin
+  if not exists (select 1 from pg_namespace where nspname = 'net') then
+    create schema net;
+  end if;
+end $$;
+
+-- Create wrapper function in net schema that matches our desired signature
+create or replace function net.http_post(
+  url text,
+  headers jsonb default '{}'::jsonb,
+  body jsonb default '{}'::jsonb
+) returns bigint as $$
+  select extensions.http_post(url, body, headers);
+$$ language sql;
+
+-- Unschedule existing job if it exists (to avoid duplicates)
+select cron.unschedule('habit-reminders-job') where exists (
+  select 1 from cron.job where jobname = 'habit-reminders-job'
+);
 
 -- Schedule the cron job to run every minute
 -- This will call your backend API endpoint to process and send reminders
@@ -16,12 +37,9 @@ select cron.schedule(
   $$
   select net.http_post(
     url := 'https://habithive-production.up.railway.app/api/notifications/send-reminders',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'X-Service-Key', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6bHJ1YWN3eGd0Y3Vub3h0dHRhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Nzg2NzA2NSwiZXhwIjoyMDczNDQzMDY1fQ.xo9X6Nh4kyAAUyiTxBJdKJJ7iWA5kVMuJtHLzjt9v6A'
-    ),
+    headers := '{"Content-Type": "application/json", "X-Service-Key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6bHJ1YWN3eGd0Y3Vub3h0dHRhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Nzg2NzA2NSwiZXhwIjoyMDczNDQzMDY1fQ.xo9X6Nh4kyAAUyiTxBJdKJJ7iWA5kVMuJtHLzjt9v6A"}'::jsonb,
     body := '{}'::jsonb
-  ) as request_id;
+  );
   $$
 );
 

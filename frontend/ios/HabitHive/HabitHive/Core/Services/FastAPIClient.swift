@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 enum FastAPIError: LocalizedError {
     case invalidURL
@@ -744,6 +745,33 @@ final class FastAPIClient: ObservableObject {
         )
     }
 
+    // MARK: - Device Registration (Push Notifications)
+
+    func registerDevice(apnsToken: String, environment: String = "prod") async throws {
+        guard isAuthenticated else { throw FastAPIError.unauthorized }
+
+        #if targetEnvironment(simulator)
+        print("⚠️ Skipping device registration on simulator")
+        return
+        #endif
+
+        let request = DeviceRegistrationRequest(
+            apnsToken: apnsToken,
+            environment: environment,
+            deviceModel: UIDevice.current.model,
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        )
+
+        let response: DeviceRegistrationResponse = try await performRequest(
+            path: "/api/devices/register",
+            method: .post,
+            body: request,
+            requiresAuth: true
+        )
+
+        print("✅ Device registered with OneSignal player ID: \(response.onesignalPlayerId ?? "none")")
+    }
+
     // MARK: - Private Helpers
 
     private func storedPhone() -> String {
@@ -1294,6 +1322,34 @@ private struct JoinHiveResponse: Decodable {
 
 private struct ContactUploadPayload: Encodable {
     let contacts: [ContactHashPayload]
+}
+
+// MARK: - Device Registration Models
+
+private struct DeviceRegistrationRequest: Encodable {
+    let apnsToken: String
+    let environment: String
+    let deviceModel: String?
+    let appVersion: String?
+
+    enum CodingKeys: String, CodingKey {
+        case apnsToken = "apns_token"
+        case environment
+        case deviceModel = "device_model"
+        case appVersion = "app_version"
+    }
+}
+
+private struct DeviceRegistrationResponse: Decodable {
+    let success: Bool
+    let id: String?
+    let onesignalPlayerId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case id
+        case onesignalPlayerId = "onesignal_player_id"
+    }
 }
 
 // MARK: - Hive Detail Responses
