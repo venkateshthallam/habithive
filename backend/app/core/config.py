@@ -10,7 +10,14 @@ class Settings(BaseSettings):
     TEST_MODE: bool = os.getenv("TEST_MODE", "false").lower() == "true"
     AUTH_TOKEN_MAX_SKEW_SECONDS: int = int(os.getenv("AUTH_TOKEN_MAX_SKEW_SECONDS", "14400"))
     PORT: int = int(os.getenv("PORT", "8002"))
-    
+
+    # OneSignal configuration
+    ONESIGNAL_APP_ID: str = os.getenv("ONESIGNAL_APP_ID", "")
+    ONESIGNAL_REST_API_KEY: str = os.getenv("ONESIGNAL_REST_API_KEY", "")
+
+    # Service key for internal API calls (pg_cron -> API)
+    INTERNAL_SERVICE_KEY: str = os.getenv("INTERNAL_SERVICE_KEY", "")
+
     class Config:
         env_file = ".env"
 

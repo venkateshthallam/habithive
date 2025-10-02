@@ -110,43 +110,62 @@ struct HabitDetailView: View {
                 .foregroundColor(HiveColors.slateText)
                 .multilineTextAlignment(.center)
 
-            // Today's Status
+            // Today's Status and Controls
             if currentHabit.type == .counter {
-                VStack(spacing: HiveSpacing.xs) {
-                    Text("\(viewModel.todayValue) / \(currentHabit.targetPerDay)")
-                        .font(HiveTypography.title2)
-                        .foregroundColor(HiveColors.slateText)
-                    
-                    Text("Today")
-                        .font(HiveTypography.caption)
-                        .foregroundColor(HiveColors.slateText.opacity(0.7))
+                VStack(spacing: HiveSpacing.md) {
+                    VStack(spacing: HiveSpacing.xs) {
+                        Text("\(viewModel.todayValue) / \(currentHabit.targetPerDay)")
+                            .font(HiveTypography.title2)
+                            .foregroundColor(HiveColors.slateText)
+
+                        Text("Today")
+                            .font(HiveTypography.caption)
+                            .foregroundColor(HiveColors.slateText.opacity(0.7))
+                    }
+
+                    // Counter Stepper
+                    CounterStepperView(
+                        currentValue: viewModel.todayValue,
+                        targetValue: currentHabit.targetPerDay,
+                        accentColor: currentHabit.color,
+                        theme: themeManager.currentTheme,
+                        onIncrement: {
+                            viewModel.incrementCounter(for: currentHabit)
+                        },
+                        onDecrement: {
+                            viewModel.decrementCounter(for: currentHabit)
+                        },
+                        onDismiss: {}
+                    )
                 }
             } else {
-                HStack(spacing: HiveSpacing.sm) {
-                    Image(systemName: viewModel.isCompletedToday ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 30))
-                        .foregroundColor(viewModel.isCompletedToday ? HiveColors.mintSuccess : Color.gray.opacity(0.5))
-                    
-                    Text(viewModel.isCompletedToday ? "Completed" : "Not completed")
+                VStack(spacing: HiveSpacing.md) {
+                    HStack(spacing: HiveSpacing.sm) {
+                        Image(systemName: viewModel.isCompletedToday ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 30))
+                            .foregroundColor(viewModel.isCompletedToday ? HiveColors.mintSuccess : Color.gray.opacity(0.5))
+
+                        Text(viewModel.isCompletedToday ? "Completed" : "Not completed")
+                            .font(HiveTypography.headline)
+                            .foregroundColor(HiveColors.slateText)
+                    }
+
+                    // Log Button for checkbox
+                    Button(action: {
+                        viewModel.toggleToday(for: currentHabit)
+                    }) {
+                        HStack {
+                            Image(systemName: viewModel.isCompletedToday ? "arrow.uturn.backward" : "checkmark")
+                            Text(viewModel.isCompletedToday ? "Unmark Today" : "Mark Complete")
+                        }
                         .font(HiveTypography.headline)
-                        .foregroundColor(HiveColors.slateText)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, HiveSpacing.sm)
+                        .background(themeManager.currentTheme.primaryGradient)
+                        .cornerRadius(HiveRadius.medium)
+                    }
                 }
-            }
-            
-            // Log Button
-            Button(action: {
-                viewModel.toggleToday(for: currentHabit)
-            }) {
-                HStack {
-                    Image(systemName: viewModel.isCompletedToday ? "arrow.uturn.backward" : (currentHabit.type == .checkbox ? "checkmark" : "drop.fill"))
-                    Text(viewModel.isCompletedToday ? "Unmark Today" : (currentHabit.type == .checkbox ? "Mark Complete" : "Add +\(currentHabit.targetPerDay)"))
-                }
-                .font(HiveTypography.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, HiveSpacing.sm)
-                .background(themeManager.currentTheme.primaryGradient)
-                .cornerRadius(HiveRadius.medium)
             }
         }
         .padding(HiveSpacing.lg)
@@ -613,6 +632,66 @@ class HabitDetailViewModel: ObservableObject {
                     UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
 #endif
                     _ = try await apiClient.logHabit(habitId: habit.id, value: value)
+                    await loadHabitDetailsAsync(habitId: habit.id)
+                } catch {
+                    await MainActor.run { self.errorMessage = error.localizedDescription }
+                }
+            }
+        }
+    }
+
+    func incrementCounter(for habit: Habit) {
+        guard habit.type == .counter else { return }
+        let newValue = min(todayValue + 1, habit.targetPerDay)
+
+#if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+#endif
+
+        // Optimistic update
+        todayValue = newValue
+        calculateStats(for: habit)
+
+        // API call
+        Task {
+            do {
+                _ = try await apiClient.logHabit(habitId: habit.id, value: newValue)
+                await loadHabitDetailsAsync(habitId: habit.id)
+            } catch {
+                await MainActor.run { self.errorMessage = error.localizedDescription }
+            }
+        }
+    }
+
+    func decrementCounter(for habit: Habit) {
+        guard habit.type == .counter else { return }
+        guard todayValue > 0 else { return }
+
+#if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+#endif
+
+        let newValue = todayValue - 1
+
+        // Optimistic update
+        todayValue = newValue
+        calculateStats(for: habit)
+
+        if newValue == 0 {
+            // Delete the log
+            Task {
+                do {
+                    try await apiClient.deleteHabitLog(habitId: habit.id, logDate: nil)
+                    await loadHabitDetailsAsync(habitId: habit.id)
+                } catch {
+                    await MainActor.run { self.errorMessage = error.localizedDescription }
+                }
+            }
+        } else {
+            // Update with new value
+            Task {
+                do {
+                    _ = try await apiClient.logHabit(habitId: habit.id, value: newValue)
                     await loadHabitDetailsAsync(habitId: habit.id)
                 } catch {
                     await MainActor.run { self.errorMessage = error.localizedDescription }

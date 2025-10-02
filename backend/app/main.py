@@ -5,7 +5,7 @@ import uvicorn
 from dotenv import load_dotenv
 import os
 
-from app.routers import auth, profiles, habits, hives, activity, contacts, devices
+from app.routers import auth, profiles, habits, hives, activity, contacts, devices, notifications
 from app.core.config import settings
 
 load_dotenv()
@@ -51,6 +51,7 @@ app.include_router(hives.router, prefix="/api/hives", tags=["hives"])
 app.include_router(activity.router, prefix="/api/activity", tags=["activity"])
 app.include_router(contacts.router, prefix="/api/contacts", tags=["contacts"])
 app.include_router(devices.router, prefix="/api/devices", tags=["devices"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
 
 if __name__ == "__main__":
     uvicorn.run(

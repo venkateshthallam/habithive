@@ -545,7 +545,7 @@ struct CounterStepperView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        HStack(spacing: HiveSpacing.md) {
+        HStack(spacing: 8) {
             // Decrement Button
             Button {
                 #if canImport(UIKit)
@@ -554,7 +554,7 @@ struct CounterStepperView: View {
                 onDecrement()
             } label: {
                 Image(systemName: "minus.circle.fill")
-                    .font(.system(size: 32, weight: .medium))
+                    .font(.system(size: 28, weight: .medium))
                     .foregroundStyle(
                         currentValue > 0 ? accentColor : theme.secondaryTextColor.opacity(0.3)
                     )
@@ -563,15 +563,18 @@ struct CounterStepperView: View {
             .buttonStyle(.plain)
 
             // Value Display
-            VStack(spacing: 2) {
-                Text("\(currentValue)")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(theme.primaryTextColor)
-                Text("/ \(targetValue)")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(theme.secondaryTextColor)
-            }
-            .frame(minWidth: 50)
+            Text("\(currentValue)")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(theme.primaryTextColor)
+                .frame(minWidth: 24)
+
+            Text("/")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(theme.secondaryTextColor.opacity(0.5))
+
+            Text("\(targetValue)")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(theme.secondaryTextColor)
 
             // Increment Button
             Button {
@@ -583,11 +586,11 @@ struct CounterStepperView: View {
                 Group {
                     if currentValue < targetValue {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 32, weight: .medium))
+                            .font(.system(size: 28, weight: .medium))
                             .foregroundStyle(theme.primaryGradient)
                     } else {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 32, weight: .medium))
+                            .font(.system(size: 28, weight: .medium))
                             .foregroundColor(theme.secondaryTextColor.opacity(0.3))
                     }
                 }
@@ -603,20 +606,20 @@ struct CounterStepperView: View {
                 onDismiss()
             } label: {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 32, weight: .medium))
+                    .font(.system(size: 28, weight: .medium))
                     .foregroundStyle(HiveColors.honeyGradientStart, HiveColors.honeyGradientEnd)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, HiveSpacing.md)
-        .padding(.vertical, HiveSpacing.sm)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: HiveRadius.xlarge)
+            RoundedRectangle(cornerRadius: HiveRadius.large)
                 .fill(theme.cardBackgroundColor)
-                .shadow(color: HiveShadow.card.color, radius: HiveShadow.card.radius * 1.5, x: 0, y: HiveShadow.card.y * 1.5)
+                .shadow(color: HiveShadow.card.color, radius: 8, x: 0, y: 4)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: HiveRadius.xlarge)
+            RoundedRectangle(cornerRadius: HiveRadius.large)
                 .stroke(accentColor.opacity(0.2), lineWidth: 1)
         )
         .transition(.scale.combined(with: .opacity))

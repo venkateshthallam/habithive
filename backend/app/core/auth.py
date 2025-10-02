@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 import jwt as pyjwt
@@ -108,3 +108,30 @@ async def get_optional_user(credentials: Optional[HTTPAuthorizationCredentials] 
         return await get_current_user(credentials)
     except:
         return None
+
+async def verify_service_key(x_service_key: str = Header(...)) -> bool:
+    """
+    Verify internal service key for pg_cron and other internal API calls
+
+    Args:
+        x_service_key: Service key from X-Service-Key header
+
+    Returns:
+        True if valid
+
+    Raises:
+        HTTPException if invalid
+    """
+    if not settings.INTERNAL_SERVICE_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Service key not configured"
+        )
+
+    if x_service_key != settings.INTERNAL_SERVICE_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid service key"
+        )
+
+    return True
