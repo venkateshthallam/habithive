@@ -134,6 +134,33 @@ struct SplashScreenView: View {
 
 // MARK: - Custom Shapes
 
+struct HexagonShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let width = rect.width
+        let height = rect.height
+        let centerX = width / 2
+        let centerY = height / 2
+        let radius = min(width, height) / 2
+
+        var path = Path()
+
+        for i in 0..<6 {
+            let angle = CGFloat(i) * .pi / 3 - .pi / 6
+            let x = centerX + radius * cos(angle)
+            let y = centerY + radius * sin(angle)
+
+            if i == 0 {
+                path.move(to: CGPoint(x: x, y: y))
+            } else {
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
+        }
+
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct LeftWingShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()

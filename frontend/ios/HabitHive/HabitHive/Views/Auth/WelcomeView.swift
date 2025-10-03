@@ -17,7 +17,9 @@ struct WelcomeView: View {
 
                 // App Logo and Title
                 VStack(spacing: HiveSpacing.md) {
-                    BeeLogoView()
+                    Image("hh-logo")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
                         .frame(width: 200, height: 200)
 
                     VStack(spacing: HiveSpacing.xs) {
