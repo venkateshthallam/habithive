@@ -72,6 +72,20 @@ async def send_reminders(
 
                 onesignal_id = onesignal_response.get("id")
                 recipient_count = onesignal_response.get("recipients", 0)
+                onesignal_errors = onesignal_response.get("errors") or []
+                onesignal_warnings = onesignal_response.get("warnings") or []
+
+                if onesignal_errors:
+                    error_message = (
+                        f"OneSignal returned errors for habit {habit_name}: {onesignal_errors}"
+                    )
+                    logger.warning(error_message)
+                    errors.append(error_message)
+
+                if onesignal_warnings:
+                    logger.info(
+                        "OneSignal warnings for habit %s: %s", habit_name, onesignal_warnings
+                    )
 
                 # Calculate sent_date in user's timezone
                 sent_date_query = supabase.rpc(
@@ -93,7 +107,9 @@ async def send_reminders(
                         "habit_name": habit_name,
                         "habit_emoji": habit_emoji,
                         "recipient_count": recipient_count,
-                        "player_ids": player_ids
+                        "player_ids": player_ids,
+                        "onesignal_errors": onesignal_errors,
+                        "onesignal_warnings": onesignal_warnings
                     }
                 }
 
@@ -104,8 +120,10 @@ async def send_reminders(
                     logger.info(f"Sent reminder for habit {habit_name} to {recipient_count} devices")
                 else:
                     failed += 1
-                    errors.append(f"Failed to send notification for habit {habit_name}")
-                    logger.warning(f"Failed to send reminder for habit {habit_name}")
+                    failure_reason = \
+                        f"Failed to send notification for habit {habit_name}: 0 recipients"
+                    errors.append(failure_reason)
+                    logger.warning(failure_reason)
 
             except Exception as e:
                 failed += 1
@@ -125,6 +143,9 @@ async def send_reminders(
                         "error_message": str(e),
                         "metadata": {
                             "habit_name": habit.get("habit_name"),
+                            "player_ids": habit.get("onesignal_player_ids"),
+                            "onesignal_errors": onesignal_response.get("errors") if 'onesignal_response' in locals() else None,
+                            "onesignal_warnings": onesignal_response.get("warnings") if 'onesignal_response' in locals() else None,
                         }
                     }
                     supabase.table("notification_logs").insert(log_entry).execute()

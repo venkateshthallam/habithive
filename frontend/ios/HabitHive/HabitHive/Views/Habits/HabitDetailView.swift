@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let habitDeleted = Notification.Name("habitDeleted")
+}
+
 struct HabitDetailView: View {
     let habit: Habit
     @Environment(\.dismiss) private var dismiss
@@ -704,7 +708,11 @@ class HabitDetailViewModel: ObservableObject {
         Task {
             do {
                 try await apiClient.deleteHabit(habitId: habitId)
-                await MainActor.run { completion() }
+                // Notify parent view to refresh
+                await MainActor.run {
+                    NotificationCenter.default.post(name: .habitDeleted, object: habitId)
+                    completion()
+                }
             } catch {
                 await MainActor.run { self.errorMessage = error.localizedDescription }
             }

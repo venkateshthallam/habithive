@@ -25,7 +25,7 @@ struct WelcomeView: View {
                             .font(HiveTypography.largeTitle)
                             .fontWeight(.heavy)
                             .foregroundColor(.white)
-                        Text("Pour honey on better habits with your hive")
+                        Text("Build habits together with friends")
                             .font(HiveTypography.body)
                             .foregroundColor(.white.opacity(0.85))
                             .multilineTextAlignment(.center)

@@ -68,6 +68,12 @@ struct HabitHiveApp: App {
                     await setupNotifications()
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                // Refresh token when app comes to foreground
+                Task {
+                    await apiClient.refreshTokenIfNeeded()
+                }
+            }
         }
     }
 

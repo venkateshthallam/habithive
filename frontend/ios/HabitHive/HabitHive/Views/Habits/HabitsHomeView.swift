@@ -93,6 +93,11 @@ struct HabitsHomeView: View {
         .onAppear {
             viewModel.loadHabits()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .habitDeleted)) { notification in
+            if let habitId = notification.object as? String {
+                viewModel.removeHabitOptimistically(habitId: habitId)
+            }
+        }
     }
     
     // MARK: - Components
@@ -957,6 +962,17 @@ class HabitsViewModel: ObservableObject {
         habits.insert(habit, at: 0)
 
         // Refresh the habits list to get the latest data from server
+        Task {
+            await loadHabitsAsync(force: true)
+        }
+    }
+
+    @MainActor
+    func removeHabitOptimistically(habitId: String) {
+        // Optimistically remove the habit from the list
+        habits.removeAll { $0.id == habitId }
+
+        // Refresh to ensure consistency with server
         Task {
             await loadHabitsAsync(force: true)
         }

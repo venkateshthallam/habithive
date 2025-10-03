@@ -301,7 +301,32 @@ final class FastAPIClient: ObservableObject {
 
     func bootstrapIfNeeded() async {
         guard isAuthenticated, !hasLoadedProfile else { return }
+        // Try to refresh token if it's about to expire
+        await refreshTokenIfNeeded()
         await loadCurrentUser()
+    }
+
+    @MainActor
+    func refreshTokenIfNeeded() async {
+        guard isAuthenticated else { return }
+        guard let token = accessToken else { return }
+
+        if accessTokenExpiry == nil {
+            accessTokenExpiry = decodeExpirationDate(from: token)
+        }
+
+        // Refresh if token expires in less than 5 minutes
+        if let expiry = accessTokenExpiry, expiry.timeIntervalSinceNow <= 300 {
+            do {
+                try await refreshAccessToken()
+            } catch {
+                print("⚠️ Token refresh failed: \(error)")
+                // If refresh fails with 401, logout
+                if case FastAPIError.unauthorized = error {
+                    logout()
+                }
+            }
+        }
     }
 
     func deleteAccount() async throws {
@@ -868,14 +893,22 @@ final class FastAPIClient: ObservableObject {
     private func refreshAccessToken() async throws {
         guard let refreshToken else { throw FastAPIError.unauthorized }
         let request = RefreshTokenRequest(refreshToken: refreshToken)
-        let response: AuthResponse = try await performRequest(
-            path: "/api/auth/refresh",
-            method: .post,
-            body: request,
-            requiresAuth: false,
-            retrying: true
-        )
-        applyAuthResponse(response)
+
+        do {
+            let response: AuthResponse = try await performRequest(
+                path: "/api/auth/refresh",
+                method: .post,
+                body: request,
+                requiresAuth: false,
+                retrying: true
+            )
+            applyAuthResponse(response)
+        } catch {
+            // If refresh token is invalid or already used, logout
+            print("❌ Token refresh failed: \(error)")
+            logout()
+            throw FastAPIError.unauthorized
+        }
     }
 
     private func attemptRefreshAfterUnauthorized() async -> Bool {
