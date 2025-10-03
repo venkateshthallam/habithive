@@ -662,7 +662,8 @@ final class APIClient: ObservableObject {
             avgCompletion: completionRate,
             todaySummary: todaySummary,
             members: members,
-            recentActivity: activity
+            recentActivity: activity,
+            heatmap: []
         )
     }
 

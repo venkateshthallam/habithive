@@ -4,7 +4,7 @@ from app.models.schemas import (
     HiveMember, HiveMemberDay, LogHiveRequest,
     HiveInvite, HiveInviteCreate, JoinHiveRequest,
     HiveDetail, HiveMemberStatus, HiveTodaySummary,
-    HiveOverviewResponse, HiveLeaderboardEntry,
+    HiveOverviewResponse, HiveLeaderboardEntry, HiveHeatmapDay,
 )
 from app.core.auth import get_current_user
 from app.core.supabase import get_user_supabase_client
@@ -309,12 +309,30 @@ async def get_hive_detail(
         hive.setdefault("invite_code", hive.get("invite_code", ""))
         hive.setdefault("updated_at", hive.get("updated_at", hive.get("created_at")))
 
+        # Build heatmap for last 30 days
+        heatmap: List[HiveHeatmapDay] = []
+        for day_offset in range(29, -1, -1):
+            day_date = today - timedelta(days=day_offset)
+            day_entries = [
+                d for d in test_hive_member_days.values()
+                if d["hive_id"] == hive_id and d["day_date"] == day_date
+            ]
+            completed = sum(1 for d in day_entries if d.get("value", 0) >= target)
+            ratio = completed / total_members if total_members > 0 else 0.0
+            heatmap.append(HiveHeatmapDay(
+                date=day_date,
+                completion_ratio=ratio,
+                completed_count=completed,
+                total_count=total_members
+            ))
+
         return HiveDetail(
             **hive,
             avg_completion=avg_completion,
             today_summary=today_summary,
             members=member_status,
             recent_activity=[],
+            heatmap=heatmap,
         )
 
     try:
@@ -478,12 +496,48 @@ async def get_hive_detail(
         hive_row.setdefault("invite_code", hive_row.get("invite_code"))
         hive_row.setdefault("updated_at", hive_row.get("updated_at", hive_row.get("created_at")))
 
+        # Build heatmap for last 30 days
+        thirty_days_ago = (date.today() - timedelta(days=29)).isoformat()
+        heatmap_response = (
+            supabase
+            .table("hive_member_days")
+            .select("day_date,value,user_id")
+            .eq("hive_id", hive_id)
+            .gte("day_date", thirty_days_ago)
+            .execute()
+        )
+
+        heatmap_data = heatmap_response.data or []
+
+        # Group by date
+        days_map: Dict[str, List[int]] = {}
+        for entry in heatmap_data:
+            day_str = entry["day_date"]
+            value = entry.get("value", 0) or 0
+            days_map.setdefault(day_str, []).append(value)
+
+        # Build heatmap with all 30 days
+        heatmap: List[HiveHeatmapDay] = []
+        for day_offset in range(29, -1, -1):
+            day_date = date.today() - timedelta(days=day_offset)
+            day_str = day_date.isoformat()
+            values = days_map.get(day_str, [])
+            completed = sum(1 for v in values if v >= target)
+            ratio = completed / member_count if member_count > 0 else 0.0
+            heatmap.append(HiveHeatmapDay(
+                date=day_date,
+                completion_ratio=ratio,
+                completed_count=completed,
+                total_count=member_count
+            ))
+
         return HiveDetail(
             **hive_row,
             avg_completion=avg_completion,
             today_summary=today_summary,
             members=member_status,
             recent_activity=activity_response.data or [],
+            heatmap=heatmap,
         )
     except HTTPException:
         raise

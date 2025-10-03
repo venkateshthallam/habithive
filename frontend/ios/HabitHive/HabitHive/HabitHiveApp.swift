@@ -63,6 +63,9 @@ struct HabitHiveApp: App {
                 // Set notification delegate
                 UNUserNotificationCenter.current().delegate = notificationManager
 
+                // Clear any delivered notifications or lingering badges
+                notificationManager.clearAllNotifications()
+
                 // Check if we need to register for push notifications
                 Task {
                     await setupNotifications()
@@ -73,6 +76,9 @@ struct HabitHiveApp: App {
                 Task {
                     await apiClient.refreshTokenIfNeeded()
                 }
+
+                // Clear badges whenever the app re-enters the foreground
+                notificationManager.clearAllNotifications()
             }
         }
     }

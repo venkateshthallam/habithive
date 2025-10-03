@@ -267,11 +267,19 @@ class HiveOverviewResponse(BaseModel):
     leaderboard: List[HiveLeaderboardEntry]
 
 
+class HiveHeatmapDay(BaseModel):
+    date: date
+    completion_ratio: float  # 0.0 to 1.0
+    completed_count: int
+    total_count: int
+
+
 class HiveDetail(Hive):
     avg_completion: float = 0.0
     today_summary: HiveTodaySummary = HiveTodaySummary()
     members: List[HiveMemberStatus] = []
     recent_activity: List[ActivityEvent] = []
+    heatmap: List[HiveHeatmapDay] = []
 
 class HabitStreakSummary(BaseModel):
     habit_id: UUID

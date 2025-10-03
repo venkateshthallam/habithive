@@ -27,6 +27,7 @@ struct HiveDetailView: View {
                     VStack(spacing: HiveSpacing.lg) {
                         headerCard(for: hive)
                         progressCard(for: hive)
+                        heatmapCard(for: hive)
                         membersCard(for: hive)
                         activityCard(for: hive)
 
@@ -99,11 +100,7 @@ struct HiveDetailView: View {
             logConfirmation = message
         }
         .onReceive(viewModel.$didDelete.filter { $0 }) { _ in
-            toastMessage = "Hive deleted successfully"
-            isErrorToast = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                dismiss()
-            }
+            dismiss()
         }
         .onReceive(viewModel.$didLeave.filter { $0 }) { _ in
             toastMessage = "Left hive successfully"
@@ -154,11 +151,13 @@ struct HiveDetailView: View {
                         Text(hive.name)
                             .font(HiveTypography.largeTitle)
                             .fontWeight(.heavy)
-                            .foregroundColor(HiveColors.beeBlack)
+                            .foregroundColor(.white)
+                            .shadow(color: Color.black.opacity(0.25), radius: 2, x: 0, y: 1)
 
                         Text(subtitle)
                             .font(HiveTypography.body)
-                            .foregroundColor(HiveColors.beeBlack.opacity(0.75))
+                            .foregroundColor(.white.opacity(0.95))
+                            .shadow(color: Color.black.opacity(0.2), radius: 1, x: 0, y: 1)
                     }
                 }
 
@@ -205,12 +204,13 @@ struct HiveDetailView: View {
                         Text("Copy invite code • \(inviteCode.uppercased())")
                     }
                     .font(HiveTypography.caption)
-                    .foregroundColor(HiveColors.beeBlack)
+                    .foregroundColor(.white)
+                    .shadow(color: Color.black.opacity(0.15), radius: 1, x: 0, y: 1)
                     .padding(.horizontal, HiveSpacing.md)
                     .padding(.vertical, HiveSpacing.sm)
                     .background(
                         RoundedRectangle(cornerRadius: HiveRadius.medium)
-                            .fill(Color.white.opacity(0.45))
+                            .fill(Color.white.opacity(0.25))
                     )
                 }
             }
@@ -250,6 +250,25 @@ struct HiveDetailView: View {
                 progressLegend(color: HiveColors.honeyGradientEnd, label: "In Progress", value: summary.partial)
                 progressLegend(color: HiveColors.lightGray, label: "Pending", value: summary.pending)
             }
+        }
+        .padding(HiveSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.large)
+                .fill(theme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(theme == .night ? 0.45 : 0.06), radius: 10, x: 0, y: 6)
+        )
+    }
+
+    private func heatmapCard(for hive: HiveDetail) -> some View {
+        let theme = themeManager.currentTheme
+        return VStack(alignment: .leading, spacing: HiveSpacing.md) {
+            Text("Last 30 Days")
+                .font(HiveTypography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(theme.primaryTextColor)
+
+            HiveHeatmapView(heatmap: hive.heatmap)
         }
         .padding(HiveSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -432,11 +451,13 @@ struct HiveDetailView: View {
             Text(value)
                 .font(HiveTypography.headline)
                 .fontWeight(.bold)
-                .foregroundColor(HiveColors.beeBlack)
+                .foregroundColor(.white)
+                .shadow(color: Color.black.opacity(0.2), radius: 1, x: 0, y: 1)
 
             Text(title)
                 .font(HiveTypography.caption)
-                .foregroundColor(HiveColors.beeBlack.opacity(0.7))
+                .foregroundColor(.white.opacity(0.9))
+                .shadow(color: Color.black.opacity(0.15), radius: 1, x: 0, y: 1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -661,12 +682,13 @@ class HiveDetailViewModel: ObservableObject {
     func deleteHive(hiveId: String) {
         Task {
             await MainActor.run { self.isDeleting = true }
+
+            // Optimistically dismiss
+            await MainActor.run { self.didDelete = true }
+
             do {
                 try await api.deleteHive(hiveId: hiveId)
-                await MainActor.run {
-                    self.isDeleting = false
-                    self.didDelete = true
-                }
+                await MainActor.run { self.isDeleting = false }
             } catch {
                 await MainActor.run {
                     self.isDeleting = false

@@ -167,6 +167,21 @@ struct Hive: Codable, Identifiable {
 }
 
 // MARK: - Hive Detail
+struct HiveHeatmapDay: Codable, Identifiable {
+    var id: String { date.ISO8601Format() }
+    let date: Date
+    let completionRatio: Double
+    let completedCount: Int
+    let totalCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case date
+        case completionRatio = "completion_ratio"
+        case completedCount = "completed_count"
+        case totalCount = "total_count"
+    }
+}
+
 struct HiveDetail: Codable {
     let id: String
     let name: String
@@ -194,6 +209,7 @@ struct HiveDetail: Codable {
     var todaySummary: HiveTodaySummary
     var members: [HiveMemberStatus]
     var recentActivity: [ActivityEvent]
+    var heatmap: [HiveHeatmapDay]
 
     enum CodingKeys: String, CodingKey {
         case id, name
@@ -220,6 +236,7 @@ struct HiveDetail: Codable {
         case todaySummary = "today_summary"
         case members
         case recentActivity = "recent_activity"
+        case heatmap
     }
 }
 

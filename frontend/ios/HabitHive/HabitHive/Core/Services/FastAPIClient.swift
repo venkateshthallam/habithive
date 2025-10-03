@@ -1464,6 +1464,7 @@ private struct HiveDetailResponse: Decodable {
     let todaySummary: HiveTodaySummaryResponse
     let members: [HiveMemberStatusResponse]
     let recentActivity: [ActivityEvent]?
+    let heatmap: [HiveHeatmapDay]
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1492,6 +1493,7 @@ private struct HiveDetailResponse: Decodable {
         case todaySummary = "today_summary"
         case members
         case recentActivity = "recent_activity"
+        case heatmap
     }
 
     func toDomain() -> HiveDetail {
@@ -1541,7 +1543,8 @@ private struct HiveDetailResponse: Decodable {
                     targetPerDay: response.targetPerDay
                 )
             },
-            recentActivity: recentActivity ?? []
+            recentActivity: recentActivity ?? [],
+            heatmap: heatmap
         )
     }
 }

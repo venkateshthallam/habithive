@@ -137,6 +137,12 @@ class NotificationManager: NSObject, ObservableObject {
         guard let token = deviceToken, !isRegistered else { return }
         await registerDeviceWithBackend(token: token)
     }
+
+    /// Clear delivered notifications and reset the app icon badge
+    func clearAllNotifications() {
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+        UIApplication.shared.applicationIconBadgeNumber = 0
+    }
 }
 
 // MARK: - UNUserNotificationCenterDelegate
