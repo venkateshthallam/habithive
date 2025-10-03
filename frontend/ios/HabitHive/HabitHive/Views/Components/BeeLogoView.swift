@@ -115,6 +115,34 @@ struct BeeLogoView: View {
     }
 }
 
+// Reusable flat-top hexagon for brand surfaces.
+struct HexagonShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let width = rect.width
+        let height = rect.height
+        let centerX = width / 2
+        let centerY = height / 2
+        let radius = min(width, height) / 2
+        let adjustment = CGFloat.pi / 6 // rotate so flat sides top/bottom
+
+        var path = Path()
+        for index in 0..<6 {
+            let angle = (CGFloat(index) * .pi / 3) - adjustment
+            let point = CGPoint(
+                x: centerX + radius * cos(angle),
+                y: centerY + radius * sin(angle)
+            )
+            if index == 0 {
+                path.move(to: point)
+            } else {
+                path.addLine(to: point)
+            }
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
 #Preview {
     ZStack {
         LinearGradient(

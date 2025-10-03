@@ -8,8 +8,7 @@ struct HabitsHomeView: View {
     @StateObject private var themeManager = ThemeManager.shared
     @State private var showCreateHabit = false
     @State private var selectedHabit: Habit?
-    @State private var showHoneyPour = false
-    @State private var honeyPourHabitId: String?
+    // Inline animation now lives inside BeeButton + Hex cells
 
     private var backgroundColor: Color {
         themeManager.currentTheme == .night ? themeManager.currentTheme.backgroundColor : HiveColors.creamBase
@@ -67,21 +66,6 @@ struct HabitsHomeView: View {
                     await viewModel.refreshHabits()
                 }
                 
-                
-                // Honey Pour Animation Overlay
-                if showHoneyPour, let habitId = honeyPourHabitId,
-                   let habit = viewModel.habits.first(where: { $0.id == habitId }) {
-                    HoneyPourAnimationView(
-                        habit: habit,
-                        onComplete: {
-                            showHoneyPour = false
-                            honeyPourHabitId = nil
-                            Task {
-                                await viewModel.refreshHabits()
-                            }
-                        }
-                    )
-                }
             }
         }
         .sheet(isPresented: $showCreateHabit) {
@@ -223,8 +207,7 @@ struct HabitsHomeView: View {
             // Always perform optimistic update and API call
             viewModel.optimisticToggle(habit: habit, value: value, adding: true)
             viewModel.logHabit(habitId: habit.id, value: value)
-            honeyPourHabitId = habit.id
-            showHoneyPour = true
+            // Inline animation handled by BeeButton + HexCellView
         }
     }
 
@@ -419,6 +402,7 @@ struct BeeButton: View {
 
     @State private var isPressed = false
     @State private var showStepper = false
+    @State private var tapEffectTrigger: Int = 0
 
     init(
         isComplete: Bool,
@@ -488,6 +472,8 @@ struct BeeButton: View {
                 }
             } else {
                 onToggle()
+                // Fire inline honey tap effect
+                tapEffectTrigger += 1
             }
         } label: {
             ZStack {
@@ -516,6 +502,9 @@ struct BeeButton: View {
                             .stroke(isComplete ? Color.white.opacity(0.5) : accentColor.opacity(theme == .night ? 0.4 : 0.25), lineWidth: 1.5)
                     )
                     .shadow(color: isComplete ? HiveColors.honeyGradientEnd.opacity(0.35) : Color.black.opacity(theme == .night ? 0.35 : 0.1), radius: 10, x: 0, y: 6)
+
+                // Inline honey confetti + fill wave
+                HoneyTapEffectView(accentColor: accentColor, size: 54, trigger: $tapEffectTrigger)
 
                 if isComplete && habitType == .checkbox {
                     Image(systemName: "checkmark")
@@ -898,6 +887,7 @@ struct HexCellView: View {
 
     @State private var showHoneyDrop = false
     @State private var fillProgress: CGFloat = 0
+    @State private var hasLoggedPreviously: Bool = false
 
     private var heatColors: [Color] {
         if theme == .night {
@@ -954,6 +944,27 @@ struct HexCellView: View {
                 )
                 .opacity(hexDay.isFuture ? 0.3 : 1.0)
 
+            // Animated honey fill for today's cell
+            if hexDay.isToday {
+                PointyHexagonShape()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(hex: "#FFD778"), Color(hex: "#FFB000")],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: hexSide * 2, height: hexSide * 2)
+                    .mask(
+                        VStack(spacing: 0) {
+                            Spacer()
+                            Rectangle().frame(height: (hexSide * 2) * fillProgress)
+                        }
+                    )
+                    .allowsHitTesting(false)
+                    .animation(.timingCurve(0.4, 0, 0.2, 1.0, duration: 0.6), value: fillProgress)
+            }
+
             // Honey drop animation overlay
             if showHoneyDrop {
                 HoneyDropletView(hexSide: hexSide)
@@ -974,6 +985,27 @@ struct HexCellView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
                 showHoneyDrop = false
                 onTap?(hexDay.date)
+            }
+        }
+        .onAppear {
+            // Initialize progress based on existing state for today
+            hasLoggedPreviously = hexDay.hasLog
+            fillProgress = (hexDay.isToday && hexDay.hasLog) ? 1 : 0
+        }
+        .onChange(of: hexDay.hasLog) { _, newValue in
+            guard hexDay.isToday else { return }
+            if newValue && !hasLoggedPreviously {
+                // animate filling up
+                #if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                #endif
+                withAnimation(.timingCurve(0.4, 0, 0.2, 1.0, duration: 0.6)) {
+                    fillProgress = 1
+                }
+                hasLoggedPreviously = true
+            } else if !newValue && hasLoggedPreviously {
+                withAnimation(.easeOut(duration: 0.35)) { fillProgress = 0 }
+                hasLoggedPreviously = false
             }
         }
     }
@@ -1356,10 +1388,49 @@ class HabitsViewModel: ObservableObject {
     func logHabit(habitId: String, value: Int) {
         Task {
             do {
-                _ = try await apiClient.logHabit(habitId: habitId, value: value)
-                await refreshHabits()
+                let result = try await apiClient.logHabit(habitId: habitId, value: value)
+                // Update only the specific habit with server response
+                await MainActor.run {
+                    if let idx = habits.firstIndex(where: { $0.id == habitId }) {
+                        var habitCopy = habits[idx]
+                        var logs = habitCopy.recentLogs ?? []
+                        let today = todayKey
+
+                        // Update or add the log with server data
+                        if let existingIndex = logs.firstIndex(where: { $0.logDate == today }) {
+                            logs[existingIndex] = HabitLog(
+                                id: result.id,
+                                habitId: habitId,
+                                userId: habitCopy.userId,
+                                logDate: result.logDate,
+                                value: result.value,
+                                source: result.source ?? "manual",
+                                createdAt: result.createdAt
+                            )
+                        } else {
+                            logs.append(HabitLog(
+                                id: result.id,
+                                habitId: habitId,
+                                userId: habitCopy.userId,
+                                logDate: result.logDate,
+                                value: result.value,
+                                source: result.source ?? "manual",
+                                createdAt: result.createdAt
+                            ))
+                        }
+                        habitCopy.recentLogs = logs
+                        habits[idx] = habitCopy
+                    }
+                }
+
+                // Silent background refresh to sync any streak/completion changes
+                await silentRefresh()
             } catch {
-                await MainActor.run { self.errorMessage = error.localizedDescription }
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                    // Revert optimistic update on error
+                    Task { await refreshHabits() }
+                }
             }
         }
     }
@@ -1369,10 +1440,29 @@ class HabitsViewModel: ObservableObject {
         Task {
             do {
                 try await apiClient.deleteHabitLog(habitId: habitId, logDate: logDate)
-                await refreshHabits()
+
+                // Silent background refresh to sync any streak/completion changes
+                await silentRefresh()
             } catch {
-                await MainActor.run { self.errorMessage = error.localizedDescription }
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                    // Revert optimistic update on error
+                    Task { await refreshHabits() }
+                }
             }
+        }
+    }
+
+    private func silentRefresh() async {
+        do {
+            let freshHabits = try await apiClient.getHabits(includeLogs: true, days: 30)
+            await MainActor.run {
+                // Update habits while preserving UI state (no loading indicator)
+                self.habits = freshHabits
+                lastLoadedAt = Date()
+            }
+        } catch {
+            // Silent fail - optimistic update already shown
         }
     }
     

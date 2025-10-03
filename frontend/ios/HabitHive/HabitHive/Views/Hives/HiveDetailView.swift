@@ -163,26 +163,13 @@ struct HiveDetailView: View {
 
                 Spacer()
 
-                Button {
-                    viewModel.logToday(hiveId: hive.id)
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(viewModel.hasCompletedToday(hive: hive) ? HiveColors.mintSuccess.opacity(0.3) : Color.white.opacity(0.85))
-                            .frame(width: 52, height: 52)
-                            .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
-
-                        if viewModel.hasCompletedToday(hive: hive) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(HiveColors.mintSuccess)
-                        } else {
-                            Text("🐝")
-                                .font(.system(size: 28))
-                        }
+                HiveBeeButton(
+                    isComplete: viewModel.hasCompletedToday(hive: hive),
+                    accentColor: Color(hex: "#FFB000"),
+                    onTap: {
+                        viewModel.logToday(hiveId: hive.id)
                     }
-                }
-                .disabled(viewModel.hasCompletedToday(hive: hive))
+                )
             }
 
             HStack(spacing: HiveSpacing.md) {
@@ -263,12 +250,46 @@ struct HiveDetailView: View {
     private func heatmapCard(for hive: HiveDetail) -> some View {
         let theme = themeManager.currentTheme
         return VStack(alignment: .leading, spacing: HiveSpacing.md) {
-            Text("Last 30 Days")
-                .font(HiveTypography.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(theme.primaryTextColor)
+            HStack {
+                Button(action: {
+                    withAnimation {
+                        viewModel.selectedMonth = Calendar.current.date(byAdding: .month, value: -1, to: viewModel.selectedMonth) ?? viewModel.selectedMonth
+                    }
+                }) {
+                    Image(systemName: "chevron.left")
+                        .foregroundColor(theme.primaryTextColor)
+                }
 
-            HiveHeatmapView(heatmap: hive.heatmap)
+                Spacer()
+
+                Text(viewModel.selectedMonth.formatted(.dateTime.month(.wide).year()))
+                    .font(HiveTypography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(theme.primaryTextColor)
+
+                Spacer()
+
+                Button(action: {
+                    withAnimation {
+                        viewModel.selectedMonth = Calendar.current.date(byAdding: .month, value: 1, to: viewModel.selectedMonth) ?? viewModel.selectedMonth
+                    }
+                }) {
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(theme.primaryTextColor)
+                        .opacity(Calendar.current.isDate(viewModel.selectedMonth, equalTo: Date(), toGranularity: .month) ? 0.3 : 1)
+                }
+                .disabled(Calendar.current.isDate(viewModel.selectedMonth, equalTo: Date(), toGranularity: .month))
+            }
+
+            HiveCalendarView(
+                month: viewModel.selectedMonth,
+                hive: hive,
+                logs: viewModel.hiveLogs,
+                theme: theme,
+                onDateTap: { date in
+                    // Optional: Handle date tap for hive
+                }
+            )
         }
         .padding(HiveSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -452,12 +473,12 @@ struct HiveDetailView: View {
                 .font(HiveTypography.headline)
                 .fontWeight(.bold)
                 .foregroundColor(.white)
-                .shadow(color: Color.black.opacity(0.2), radius: 1, x: 0, y: 1)
+                .shadow(color: Color.black.opacity(0.4), radius: 2, x: 0, y: 1)
 
             Text(title)
                 .font(HiveTypography.caption)
-                .foregroundColor(.white.opacity(0.9))
-                .shadow(color: Color.black.opacity(0.15), radius: 1, x: 0, y: 1)
+                .foregroundColor(.white)
+                .shadow(color: Color.black.opacity(0.3), radius: 2, x: 0, y: 1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -613,6 +634,79 @@ private struct ToastView: View {
     }
 }
 
+// MARK: - Hive Bee Button
+struct HiveBeeButton: View {
+    let isComplete: Bool
+    let accentColor: Color
+    let onTap: () -> Void
+
+    @State private var isPressed = false
+
+    var body: some View {
+        Button {
+            #if canImport(UIKit)
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            #endif
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.55)) {
+                isPressed = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.55)) {
+                    isPressed = false
+                }
+            }
+            onTap()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(Color.clear)
+                    .frame(width: 54, height: 54)
+                    .overlay(
+                        Group {
+                            if isComplete {
+                                LinearGradient(
+                                    colors: [HiveColors.honeyGradientStart, HiveColors.honeyGradientEnd],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            } else {
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.9),
+                                        Color.white.opacity(0.8)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            }
+                        }
+                        .clipShape(Circle())
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(isComplete ? Color.white.opacity(0.5) : accentColor.opacity(0.3), lineWidth: 1.5)
+                    )
+                    .shadow(color: isComplete ? HiveColors.honeyGradientEnd.opacity(0.35) : Color.black.opacity(0.1), radius: 10, x: 0, y: 6)
+
+                if isComplete {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white)
+                        .transition(.scale)
+                } else {
+                    Text("🐝")
+                        .font(.system(size: 22))
+                        .transition(.scale)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(isPressed ? 0.9 : 1.0)
+        .disabled(isComplete)
+        .accessibilityLabel(isComplete ? "Hive logged for today" : "Log hive")
+    }
+}
+
 @MainActor
 class HiveDetailViewModel: ObservableObject {
     @Published var hive: HiveDetail?
@@ -624,6 +718,8 @@ class HiveDetailViewModel: ObservableObject {
     @Published var isDeleting = false
     @Published var didLeave = false
     @Published var isLeaving = false
+    @Published var selectedMonth = Date()
+    @Published var hiveLogs: [HiveLog] = []
 
     private let api = FastAPIClient.shared
 
@@ -723,8 +819,168 @@ class HiveDetailViewModel: ObservableObject {
         do {
             let detail = try await api.getHiveDetail(hiveId: hiveId)
             self.hive = detail
+            // Load hive logs for calendar view
+            await loadHiveLogs(hiveId: hiveId)
         } catch {
             self.errorMessage = error.localizedDescription
         }
     }
+
+    @MainActor
+    private func loadHiveLogs(hiveId: String) async {
+        do {
+            let startDate = Calendar.current.date(byAdding: .month, value: -12, to: Date())
+            // TODO: Add API method to fetch hive logs
+            // For now, use empty array
+            self.hiveLogs = []
+        } catch {
+            // Silent fail for now
+        }
+    }
+}
+
+// MARK: - Hive Calendar View
+struct HiveCalendarView: View {
+    let month: Date
+    let hive: HiveDetail
+    let logs: [HiveLog]
+    let theme: AppTheme
+    let onDateTap: (Date) -> Void
+
+    private let weekDays = ["S", "M", "T", "W", "T", "F", "S"]
+
+    var body: some View {
+        let days = getDaysInMonth()
+        VStack(spacing: HiveSpacing.xs) {
+            // Week day headers
+            HStack(spacing: HiveSpacing.xs) {
+                ForEach(Array(weekDays.enumerated()), id: \.offset) { _, day in
+                    Text(day)
+                        .font(HiveTypography.caption2)
+                        .foregroundColor(theme.secondaryTextColor.opacity(0.5))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            // Calendar grid
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: HiveSpacing.xs), count: 7), spacing: HiveSpacing.xs) {
+                ForEach(Array(days.enumerated()), id: \.offset) { _, date in
+                    if let date = date {
+                        HiveDayCell(
+                            date: date,
+                            hive: hive,
+                            isCompleted: isDateCompleted(date),
+                            theme: theme,
+                            onTap: { onDateTap(date) }
+                        )
+                    } else {
+                        Color.clear
+                            .frame(height: 40)
+                    }
+                }
+            }
+        }
+    }
+
+    private func getDaysInMonth() -> [Date?] {
+        let calendar = Calendar.current
+        let startOfMonth = calendar.dateInterval(of: .month, for: month)?.start ?? month
+        let numberOfDays = calendar.range(of: .day, in: .month, for: month)?.count ?? 30
+        let firstWeekday = calendar.component(.weekday, from: startOfMonth) - 1
+
+        var days: [Date?] = Array(repeating: nil, count: firstWeekday)
+
+        for day in 1...numberOfDays {
+            if let date = calendar.date(byAdding: .day, value: day - 1, to: startOfMonth) {
+                days.append(date)
+            }
+        }
+
+        // Fill remaining cells
+        while days.count % 7 != 0 {
+            days.append(nil)
+        }
+
+        return days
+    }
+
+    private func isDateCompleted(_ date: Date) -> Bool {
+        let dateString = DateFormatter.hiveDayFormatter.string(from: date)
+        // Check if all members completed on this date
+        // For now, use heatmap data
+        if let heatmapDay = hive.heatmap.first(where: {
+            DateFormatter.hiveDayFormatter.string(from: $0.date) == dateString
+        }) {
+            return heatmapDay.completionRatio >= 1.0
+        }
+        return false
+    }
+}
+
+// MARK: - Hive Day Cell
+struct HiveDayCell: View {
+    let date: Date
+    let hive: HiveDetail
+    let isCompleted: Bool
+    let theme: AppTheme
+    let onTap: () -> Void
+
+    private var isToday: Bool {
+        Calendar.current.isDateInToday(date)
+    }
+
+    private var isFutureDate: Bool {
+        date > Date()
+    }
+
+    var body: some View {
+        Button(action: {
+            guard !isFutureDate else { return }
+            onTap()
+        }) {
+            ZStack {
+                RoundedRectangle(cornerRadius: HiveRadius.small)
+                    .fill(backgroundColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: HiveRadius.small)
+                            .stroke(isToday ? HiveColors.honeyGradientEnd : Color.clear, lineWidth: 2)
+                    )
+
+                Text("\(Calendar.current.component(.day, from: date))")
+                    .font(HiveTypography.caption)
+                    .foregroundColor(textColor)
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(isFutureDate)
+        .frame(height: 40)
+    }
+
+    private var backgroundColor: Color {
+        if isCompleted {
+            return HiveColors.mintSuccess.opacity(0.8)
+        } else {
+            return Color.gray.opacity(0.1)
+        }
+    }
+
+    private var textColor: Color {
+        if isCompleted {
+            return .white
+        } else if isToday {
+            return HiveColors.honeyGradientEnd
+        } else {
+            return theme.primaryTextColor
+        }
+    }
+}
+
+// MARK: - Supporting Model
+struct HiveLog: Identifiable, Codable {
+    let id: String
+    let hiveId: String
+    let userId: String
+    let logDate: String
+    let value: Int
+    let createdAt: Date
 }
