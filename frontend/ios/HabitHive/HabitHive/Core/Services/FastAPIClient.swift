@@ -837,7 +837,13 @@ final class FastAPIClient: ObservableObject {
         let trimmedName = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let needsName = trimmedName.isEmpty || trimmedName.lowercased() == "new bee" || trimmedName.hasPrefix("Bee ")
         let needsPhone = user.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        requiresProfileSetup = needsName || needsPhone
+
+        let needsSetup = needsName || needsPhone
+        requiresProfileSetup = needsSetup
+
+        if !needsSetup {
+            persistOnboardingCompletion()
+        }
     }
 
     private func storeAccessToken(_ token: String?) {

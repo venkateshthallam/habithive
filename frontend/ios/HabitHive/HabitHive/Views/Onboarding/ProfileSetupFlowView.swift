@@ -17,6 +17,7 @@ struct ProfileSetupFlowView: View {
     }
 
     @StateObject private var themeManager = ThemeManager.shared
+    @ObservedObject private var apiClient = FastAPIClient.shared
     @State private var step: Step = .name
     @State private var displayName: String
     @State private var phoneNumber: String
@@ -26,11 +27,26 @@ struct ProfileSetupFlowView: View {
     @State private var hasRequestedContacts = false
     @State private var notificationsEnabled = false
     @State private var hasRequestedNotifications = false
+    @State private var hasAutoCompleted = false
 
     init() {
         let currentUser = FastAPIClient.shared.currentUser
         _displayName = State(initialValue: currentUser?.displayName ?? "")
         _phoneNumber = State(initialValue: currentUser?.phone ?? "")
+
+        if let currentUser {
+            let trimmedName = currentUser.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let needsName = trimmedName.isEmpty || trimmedName.lowercased() == "new bee" || trimmedName.hasPrefix("Bee ")
+            let needsPhone = currentUser.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+            if needsName {
+                _step = State(initialValue: .name)
+            } else if needsPhone {
+                _step = State(initialValue: .phone)
+            } else {
+                _step = State(initialValue: .notifications)
+            }
+        }
     }
 
     var body: some View {
@@ -74,6 +90,21 @@ struct ProfileSetupFlowView: View {
                     .progressViewStyle(CircularProgressViewStyle(tint: HiveColors.honeyGradientEnd))
                     .padding(HiveSpacing.lg)
             }
+        }
+        .onAppear {
+            maybeCompleteIfProfileReady()
+        }
+        .onChange(of: apiClient.currentUser?.id) { _ in
+            syncStateWithCurrentUser()
+            maybeCompleteIfProfileReady()
+        }
+        .onChange(of: apiClient.currentUser?.displayName) { _ in
+            syncStateWithCurrentUser()
+            maybeCompleteIfProfileReady()
+        }
+        .onChange(of: apiClient.currentUser?.phone) { _ in
+            syncStateWithCurrentUser()
+            maybeCompleteIfProfileReady()
         }
     }
 
@@ -200,6 +231,44 @@ struct ProfileSetupFlowView: View {
             return input.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return digits
+    }
+
+    private func syncStateWithCurrentUser() {
+        guard let user = apiClient.currentUser else { return }
+
+        if displayName.isEmpty {
+            displayName = user.displayName
+        }
+
+        if phoneNumber.isEmpty {
+            phoneNumber = user.phone
+        }
+
+        if !hasAutoCompleted {
+            let trimmedName = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let needsName = trimmedName.isEmpty || trimmedName.lowercased() == "new bee" || trimmedName.hasPrefix("Bee ")
+            let needsPhone = user.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+            if needsName {
+                step = .name
+            } else if needsPhone {
+                step = .phone
+            }
+        }
+    }
+
+    private func maybeCompleteIfProfileReady() {
+        guard !hasAutoCompleted else { return }
+        guard let user = apiClient.currentUser else { return }
+
+        let trimmedName = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasName = !trimmedName.isEmpty && trimmedName.lowercased() != "new bee" && !trimmedName.hasPrefix("Bee ")
+        let hasPhone = !user.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        if hasName && hasPhone {
+            hasAutoCompleted = true
+            apiClient.markProfileSetupComplete()
+        }
     }
 }
 

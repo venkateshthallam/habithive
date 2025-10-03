@@ -38,6 +38,8 @@ struct HabitsHomeView: View {
                                         habit: habit,
                                         todayKey: viewModel.currentDayKey,
                                         theme: themeManager.currentTheme,
+                                        userTimezone: viewModel.userTimezone,
+                                        dayStartHour: viewModel.dayStartHour,
                                         onLog: {
                                             handleBeeButtonTap(habit)
                                         },
@@ -277,6 +279,8 @@ struct HabitCardView: View {
     let habit: Habit
     let todayKey: String
     let theme: AppTheme
+    let userTimezone: TimeZone
+    let dayStartHour: Int
     let onLog: () -> Void
     let onIncrement: () -> Void
     let onDecrement: () -> Void
@@ -359,7 +363,9 @@ struct HabitCardView: View {
                 habitColor: habit.color,
                 target: habit.targetPerDay,
                 type: habit.type,
-                theme: theme
+                theme: theme,
+                userTimezone: userTimezone,
+                dayStartHour: dayStartHour
             )
 
             HStack(spacing: HiveSpacing.md) {
@@ -631,12 +637,23 @@ struct CounterStepperView: View {
     }
 }
 
-// MARK: - Honeycomb Grid
+// MARK: - Honeycomb Grid (Staggered Hive Layout)
 struct HoneycombGridView: View {
-    private let weeksToShow: Int
-    private let grid: [[HoneycombCellData]]
+    private let hexDays: [HexDay]
     private let theme: AppTheme
     private let accentColor: Color
+    private let userTimezone: TimeZone
+    private let dayStartHour: Int
+    private let onTap: ((Date) -> Void)?
+
+    // Hex dimensions (slightly increased from 12 to 14)
+    private let hexSide: CGFloat = 14
+    private let gap: CGFloat = 2
+
+    private var hexWidth: CGFloat { sqrt(3) * hexSide }
+    private var hexHeight: CGFloat { 2 * hexSide }
+    private var dx: CGFloat { hexWidth + gap }
+    private var dy: CGFloat { 1.5 * hexSide + gap }
 
     init(
         logs: [HabitLog],
@@ -644,156 +661,432 @@ struct HoneycombGridView: View {
         target: Int,
         type: HabitType,
         theme: AppTheme,
-        weeksToShow: Int = 5
+        userTimezone: TimeZone = .current,
+        dayStartHour: Int = 0,
+        weeksToShow: Int = 5,
+        onTap: ((Date) -> Void)? = nil
     ) {
-        self.weeksToShow = weeksToShow
         self.theme = theme
         self.accentColor = habitColor
-        self.grid = HoneycombGridView.makeGrid(
+        self.userTimezone = userTimezone
+        self.dayStartHour = dayStartHour
+        self.onTap = onTap
+        self.hexDays = HoneycombGridView.makeHexDays(
             logs: logs,
             target: target,
             type: type,
+            userTimezone: userTimezone,
+            dayStartHour: dayStartHour,
             weeksToShow: weeksToShow
         )
     }
 
     var body: some View {
-        let cellSize: CGFloat = 16
-        let horizontalSpacing: CGFloat = 6
-        let verticalSpacing: CGFloat = 6
-        let dayLabels = ["M", "T", "W", "T", "F", "S", "S"]
+        let dayLabels = ["S", "M", "T", "W", "T", "F", "S"]
+        let gridWidth = 7 * dx + hexWidth / 2  // Total width of 7 columns
 
-        HStack(alignment: .top, spacing: 8) {
-            // Weekday labels
-            VStack(alignment: .trailing, spacing: verticalSpacing) {
-                ForEach(0..<7, id: \.self) { row in
-                    Text(dayLabels[row])
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(theme.secondaryTextColor.opacity(0.6))
-                        .frame(width: 12, height: cellSize, alignment: .trailing)
-                }
-            }
-            .padding(.top, 2)
+        VStack(spacing: 6) {
+            // Weekday headers - align each header to its column center in row 0
+            GeometryReader { geometry in
+                let leadingOffset = (geometry.size.width - gridWidth) / 2
 
-            // Grid
-            VStack(alignment: .leading, spacing: verticalSpacing) {
-                ForEach(0..<7, id: \.self) { row in
-                    HStack(spacing: horizontalSpacing) {
-                        ForEach(0..<weeksToShow, id: \.self) { column in
-                            let cell = grid[column][row]
-                            HoneycombCellView(
-                                cell: cell,
-                                accentColor: accentColor,
-                                theme: theme
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(dayLabels.enumerated()), id: \.offset) { col, day in
+                        Text(day)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(theme.secondaryTextColor.opacity(0.6))
+                            .position(
+                                x: leadingOffset + CGFloat(col) * dx + hexWidth / 2,
+                                y: 8
                             )
-                            .frame(width: cellSize, height: cellSize)
-                        }
                     }
-                    .offset(x: row.isMultiple(of: 2) ? 0 : (cellSize + horizontalSpacing) / 2)
                 }
             }
+            .frame(height: 16)
+
+            // Staggered hex grid
+            GeometryReader { geometry in
+                let leadingOffset = (geometry.size.width - gridWidth) / 2
+
+                ZStack(alignment: .topLeading) {
+                    // Streak connectors (drawn first, under hexes)
+                    ForEach(hexDays.filter { $0.hasStreakConnection }) { hexDay in
+                        StreakConnectorView(
+                            hexDay: hexDay,
+                            allDays: hexDays,
+                            hexWidth: hexWidth,
+                            hexHeight: hexHeight,
+                            dx: dx,
+                            dy: dy,
+                            color: accentColor,
+                            theme: theme,
+                            leadingOffset: leadingOffset
+                        )
+                    }
+
+                    // Hexagons
+                    ForEach(hexDays) { hexDay in
+                        HexCellView(
+                            hexDay: hexDay,
+                            accentColor: accentColor,
+                            theme: theme,
+                            hexSide: hexSide,
+                            onTap: onTap
+                        )
+                        .position(
+                            x: hexPosition(hexDay, leadingOffset: leadingOffset).x,
+                            y: hexPosition(hexDay, leadingOffset: leadingOffset).y
+                        )
+                    }
+                }
+            }
+            .frame(height: calculateGridHeight())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private static func makeGrid(
+    private func hexPosition(_ hexDay: HexDay, leadingOffset: CGFloat = 0) -> CGPoint {
+        let row = hexDay.weekIndex
+        let col = hexDay.weekDay
+
+        let rowOffset = (row % 2 == 1) ? hexWidth / 2 : 0
+        let x = leadingOffset + CGFloat(col) * dx + rowOffset + hexWidth / 2
+        let y = CGFloat(row) * dy + hexHeight / 2 + 4
+
+        return CGPoint(x: x, y: y)
+    }
+
+    private func calculateGridHeight() -> CGFloat {
+        let maxWeek = hexDays.map { $0.weekIndex }.max() ?? 0
+        return CGFloat(maxWeek + 1) * dy + hexHeight + 8
+    }
+
+    private static func makeHexDays(
         logs: [HabitLog],
         target: Int,
         type: HabitType,
+        userTimezone: TimeZone,
+        dayStartHour: Int,
         weeksToShow: Int
-    ) -> [[HoneycombCellData]] {
-        let calendar = Calendar(identifier: .gregorian)
-        let today = calendar.startOfDay(for: Date())
-        let todayWeekComponents = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)
-        let endOfThisWeek = calendar.date(from: todayWeekComponents) ?? today
-        guard let startDate = calendar.date(byAdding: .weekOfYear, value: -(weeksToShow - 1), to: endOfThisWeek) else {
-            return Array(repeating: Array(repeating: HoneycombCellData(date: today, state: .future, isToday: false), count: 7), count: weeksToShow)
+    ) -> [HexDay] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = userTimezone
+        calendar.firstWeekday = 1 // Sunday
+
+        let now = Date()
+        let adjustedNow = calendar.date(byAdding: .hour, value: -dayStartHour, to: now) ?? now
+        let today = calendar.startOfDay(for: adjustedNow)
+
+        // Get start of current week
+        let weekComponents = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)
+        guard let weekStart = calendar.date(from: weekComponents) else { return [] }
+
+        // Go back to cover weeksToShow
+        guard let gridStart = calendar.date(byAdding: .weekOfYear, value: -(weeksToShow - 1), to: weekStart) else {
+            return []
         }
 
         let lookup = logs.reduce(into: [String: HabitLog]()) { partial, log in
             partial[log.logDate] = log
         }
 
-        return (0..<weeksToShow).map { weekIndex in
-            guard let weekStart = calendar.date(byAdding: .weekOfYear, value: weekIndex, to: startDate) else {
-                return Array(repeating: HoneycombCellData(date: today, state: .future, isToday: false), count: 7)
-            }
+        var hexDays: [HexDay] = []
 
-            return (0..<7).compactMap { dayOffset -> HoneycombCellData? in
-                guard let cellDate = calendar.date(byAdding: .day, value: dayOffset, to: weekStart) else { return nil }
-                let dayKey = DateFormatter.hiveDayFormatter.string(from: cellDate)
-                let log = lookup[dayKey]
-                let state: HoneycombCellState
-
-                if cellDate > today {
-                    state = .future
-                } else if let log {
-                    switch type {
-                    case .checkbox:
-                        state = .full
-                    case .counter:
-                        if log.value >= target {
-                            state = .full
-                        } else if log.value > 0 {
-                            state = .partial
-                        } else {
-                            state = .empty
-                        }
-                    }
-                } else {
-                    state = .empty
+        for weekIndex in 0..<weeksToShow {
+            for weekDay in 0..<7 {
+                let dayOffset = weekIndex * 7 + weekDay
+                guard let cellDate = calendar.date(byAdding: .day, value: dayOffset, to: gridStart) else {
+                    continue
                 }
 
-                return HoneycombCellData(
+                let dayKey = DateFormatter.hiveDayFormatter.string(from: cellDate)
+                let log = lookup[dayKey]
+
+                let intensity = calculateIntensity(log: log, target: target, type: type)
+                let isFuture = cellDate > today
+
+                hexDays.append(HexDay(
+                    id: dayKey,
                     date: cellDate,
-                    state: state,
-                    isToday: calendar.isDate(cellDate, inSameDayAs: today)
+                    weekIndex: weekIndex,
+                    weekDay: weekDay,
+                    intensity: isFuture ? 0 : intensity,
+                    isToday: calendar.isDate(cellDate, inSameDayAs: today),
+                    isFuture: isFuture,
+                    value: log?.value ?? 0,
+                    hasLog: log != nil
+                ))
+            }
+        }
+
+        // Calculate streak connections
+        return addStreakConnections(hexDays: hexDays, calendar: calendar)
+    }
+
+    private static func calculateIntensity(log: HabitLog?, target: Int, type: HabitType) -> Int {
+        guard let log else { return 0 }
+
+        switch type {
+        case .checkbox:
+            return log.value > 0 ? 4 : 0
+        case .counter:
+            let ratio = Double(log.value) / Double(max(target, 1))
+            if ratio >= 1.0 { return 4 }
+            if ratio >= 0.75 { return 3 }
+            if ratio >= 0.5 { return 2 }
+            if ratio > 0 { return 1 }
+            return 0
+        }
+    }
+
+    private static func addStreakConnections(hexDays: [HexDay], calendar: Calendar) -> [HexDay] {
+        var updatedDays = hexDays
+        let dayMap = Dictionary(uniqueKeysWithValues: hexDays.map { ($0.id, $0) })
+
+        for i in 0..<updatedDays.count {
+            guard updatedDays[i].hasLog && !updatedDays[i].isFuture else { continue }
+
+            let currentDate = updatedDays[i].date
+
+            // Check adjacent days for streaks (E, W, NE, NW, SE, SW)
+            let neighbors = getHexNeighbors(
+                weekIndex: updatedDays[i].weekIndex,
+                weekDay: updatedDays[i].weekDay,
+                date: currentDate,
+                calendar: calendar
+            )
+
+            for (direction, neighborDate) in neighbors {
+                let neighborKey = DateFormatter.hiveDayFormatter.string(from: neighborDate)
+                if let neighbor = dayMap[neighborKey], neighbor.hasLog && !neighbor.isFuture {
+                    updatedDays[i].streakDirections.insert(direction)
+                }
+            }
+        }
+
+        return updatedDays
+    }
+
+    private static func getHexNeighbors(
+        weekIndex: Int,
+        weekDay: Int,
+        date: Date,
+        calendar: Calendar
+    ) -> [(HexDirection, Date)] {
+        var neighbors: [(HexDirection, Date)] = []
+
+        // East (next day in week)
+        if let nextDay = calendar.date(byAdding: .day, value: 1, to: date) {
+            neighbors.append((.east, nextDay))
+        }
+
+        // West (previous day in week)
+        if let prevDay = calendar.date(byAdding: .day, value: -1, to: date) {
+            neighbors.append((.west, prevDay))
+        }
+
+        return neighbors
+    }
+}
+
+// MARK: - Hex Cell View (with Honey Drop Animation)
+struct HexCellView: View {
+    let hexDay: HexDay
+    let accentColor: Color
+    let theme: AppTheme
+    let hexSide: CGFloat
+    let onTap: ((Date) -> Void)?
+
+    @State private var showHoneyDrop = false
+    @State private var fillProgress: CGFloat = 0
+
+    private var heatColors: [Color] {
+        if theme == .night {
+            return [
+                Color(hex: "#171719"), // 0 - empty
+                Color(hex: "#4A3B0C"), // 1
+                Color(hex: "#6B4F0D"), // 2
+                Color(hex: "#9A6E10"), // 3
+                Color(hex: "#C38812"), // 4
+                Color(hex: "#F2A91A")  // 5 (full)
+            ]
+        } else {
+            return [
+                Color(hex: "#FFFFFF"), // 0 - empty
+                Color(hex: "#FFEEC2"), // 1
+                Color(hex: "#FFD778"), // 2
+                Color(hex: "#FFC34D"), // 3
+                Color(hex: "#FFB000"), // 4
+                Color(hex: "#E69A00")  // 5 (full)
+            ]
+        }
+    }
+
+    private var fillColor: Color {
+        if hexDay.isFuture {
+            return theme == .night ? Color(hex: "#171719") : Color(hex: "#FFFFFF")
+        }
+        return heatColors[min(hexDay.intensity, heatColors.count - 1)]
+    }
+
+    private var strokeColor: Color {
+        if hexDay.isToday {
+            return theme == .night ? Color(hex: "#F2A91A") : Color(hex: "#FFB000")
+        }
+        return theme == .night ? Color(hex: "#2B2B2E") : Color(hex: "#EDE7D9")
+    }
+
+    var body: some View {
+        ZStack {
+            // Main hexagon
+            PointyHexagonShape()
+                .fill(fillColor)
+                .frame(width: hexSide * 2, height: hexSide * 2)
+                .overlay(
+                    PointyHexagonShape()
+                        .stroke(strokeColor, lineWidth: hexDay.isToday ? 1.5 : 0.8)
+                        .frame(width: hexSide * 2, height: hexSide * 2)
                 )
+                .shadow(
+                    color: hexDay.intensity > 2 ? accentColor.opacity(0.2) : Color.clear,
+                    radius: 3,
+                    x: 0,
+                    y: 2
+                )
+                .opacity(hexDay.isFuture ? 0.3 : 1.0)
+
+            // Honey drop animation overlay
+            if showHoneyDrop {
+                HoneyDropletView(hexSide: hexSide)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .onTapGesture {
+            guard !hexDay.isFuture else { return }
+
+            #if canImport(UIKit)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            #endif
+
+            withAnimation(.easeOut(duration: 0.2)) {
+                showHoneyDrop = true
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
+                showHoneyDrop = false
+                onTap?(hexDay.date)
             }
         }
     }
 }
 
-// MARK: - Honeycomb Cell View
-struct HoneycombCellView: View {
-    let cell: HoneycombCellData
-    let accentColor: Color
-    let theme: AppTheme
-
-    private var fillColor: Color {
-        switch cell.state {
-        case .future:
-            return theme == .night ? Color.white.opacity(0.04) : Color.white.opacity(0.6)
-        case .empty:
-            return theme == .night ? Color.white.opacity(0.08) : HiveColors.lightGray.opacity(0.7)
-        case .partial:
-            return accentColor.opacity(theme == .night ? 0.55 : 0.45)
-        case .full:
-            return accentColor.opacity(theme == .night ? 0.95 : 0.9)
-        }
-    }
-
-    private var borderColor: Color {
-        if cell.isToday {
-            return HiveColors.honeyGradientEnd
-        }
-        return accentColor.opacity(theme == .night ? 0.4 : 0.25)
-    }
+// MARK: - Honey Droplet Animation
+struct HoneyDropletView: View {
+    let hexSide: CGFloat
+    @State private var offset: CGFloat = -8
+    @State private var opacity: Double = 1
 
     var body: some View {
-        HexagonMiniShape()
-            .fill(fillColor)
-            .overlay(
-                HexagonMiniShape()
-                    .stroke(borderColor, lineWidth: cell.isToday ? 1.4 : 0.8)
+        Circle()
+            .fill(
+                LinearGradient(
+                    colors: [Color(hex: "#FFD778"), Color(hex: "#FFB000")],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             )
-            .opacity(cell.state == .future ? 0.3 : 1.0)
-            .shadow(color: cell.state == .full ? accentColor.opacity(0.25) : .clear, radius: 3, x: 0, y: 2)
-            .accessibilityHidden(true)
+            .frame(width: hexSide * 0.4, height: hexSide * 0.4)
+            .offset(y: offset)
+            .opacity(opacity)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    offset = 6
+                }
+                withAnimation(.easeIn(duration: 0.12).delay(0.2)) {
+                    opacity = 0
+                }
+            }
+    }
+}
+
+// MARK: - Streak Connector View
+struct StreakConnectorView: View {
+    let hexDay: HexDay
+    let allDays: [HexDay]
+    let hexWidth: CGFloat
+    let hexHeight: CGFloat
+    let dx: CGFloat
+    let dy: CGFloat
+    let color: Color
+    let theme: AppTheme
+    let leadingOffset: CGFloat
+
+    var body: some View {
+        ForEach(Array(hexDay.streakDirections), id: \.self) { direction in
+            connectorPath(for: direction)
+                .stroke(color.opacity(theme == .night ? 0.6 : 0.5), lineWidth: 1)
+        }
+    }
+
+    private func connectorPath(for direction: HexDirection) -> Path {
+        Path { path in
+            let start = hexPosition(hexDay)
+
+            switch direction {
+            case .east:
+                let end = CGPoint(x: start.x + dx / 2, y: start.y)
+                path.move(to: start)
+                path.addLine(to: end)
+            case .west:
+                let end = CGPoint(x: start.x - dx / 2, y: start.y)
+                path.move(to: start)
+                path.addLine(to: end)
+            case .northEast, .northWest, .southEast, .southWest:
+                // Not implemented yet
+                break
+            }
+        }
+    }
+
+    private func hexPosition(_ hexDay: HexDay) -> CGPoint {
+        let row = hexDay.weekIndex
+        let col = hexDay.weekDay
+
+        let rowOffset = (row % 2 == 1) ? hexWidth / 2 : 0
+        let x = leadingOffset + CGFloat(col) * dx + rowOffset + hexWidth / 2
+        let y = CGFloat(row) * dy + hexHeight / 2 + 4
+
+        return CGPoint(x: x, y: y)
     }
 }
 
 // MARK: - Supporting Models
+struct HexDay: Identifiable {
+    let id: String
+    let date: Date
+    let weekIndex: Int  // 0..5
+    let weekDay: Int    // 0..6 (Sun..Sat)
+    let intensity: Int  // 0..4
+    let isToday: Bool
+    let isFuture: Bool
+    let value: Int
+    let hasLog: Bool
+    var streakDirections: Set<HexDirection> = []
+
+    var hasStreakConnection: Bool {
+        !streakDirections.isEmpty
+    }
+}
+
+enum HexDirection: Hashable, CaseIterable {
+    case east
+    case west
+    case northEast
+    case northWest
+    case southEast
+    case southWest
+}
+
+// Legacy support
 struct HoneycombCellData {
     let date: Date
     let state: HoneycombCellState
@@ -822,6 +1115,35 @@ struct HabitGlyph: View {
                 .font(.system(size: 32))
         }
         .frame(width: 60, height: 60)
+    }
+}
+
+// MARK: - Pointy Hexagon Shape (Pointy-Top)
+struct PointyHexagonShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            let width = rect.width
+            let height = rect.height
+            let centerX = width / 2
+            let centerY = height / 2
+            let radius = min(width, height) / 2
+
+            // Pointy-top hexagon vertices
+            let angle = CGFloat.pi / 3  // 60 degrees
+
+            path.move(to: CGPoint(
+                x: centerX + radius * cos(-CGFloat.pi / 2),
+                y: centerY + radius * sin(-CGFloat.pi / 2)
+            ))
+
+            for i in 1...6 {
+                let x = centerX + radius * cos(-CGFloat.pi / 2 + angle * CGFloat(i))
+                let y = centerY + radius * sin(-CGFloat.pi / 2 + angle * CGFloat(i))
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
+
+            path.closeSubpath()
+        }
     }
 }
 
@@ -869,11 +1191,11 @@ class HabitsViewModel: ObservableObject {
     @Published var habits: [Habit] = []
     @Published var isLoading = false
     @Published var errorMessage = ""
-    
+
     private let apiClient = FastAPIClient.shared
     private var lastLoadedAt: Date?
     private let freshnessInterval: TimeInterval = 90
-    
+
     @MainActor
     var completedToday: Int {
         let today = todayKey
@@ -884,13 +1206,24 @@ class HabitsViewModel: ObservableObject {
             return false
         }.count
     }
-    
+
     var totalStreak: Int {
         habits.compactMap { $0.currentStreak }.max() ?? 0
     }
 
     @MainActor
     var currentDayKey: String { todayKey }
+
+    @MainActor
+    var userTimezone: TimeZone {
+        guard let user = apiClient.currentUser else { return .current }
+        return TimeZone(identifier: user.timezone) ?? .current
+    }
+
+    @MainActor
+    var dayStartHour: Int {
+        return apiClient.currentUser?.dayStartHour ?? 0
+    }
     
     func loadHabits() {
         Task { await loadHabitsAsync(force: false) }
