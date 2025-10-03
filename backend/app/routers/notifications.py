@@ -281,3 +281,47 @@ async def get_notification_logs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch notification logs: {str(e)}"
         )
+
+
+@router.get("/debug/devices")
+async def debug_devices(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Debug endpoint to check device registration and player IDs
+    """
+    user_id = current_user["id"]
+
+    try:
+        supabase = get_supabase_admin()
+
+        # Get all devices for user
+        devices_response = supabase.table("device_tokens")\
+            .select("*")\
+            .eq("user_id", user_id)\
+            .execute()
+
+        devices = devices_response.data or []
+
+        # Get profile notification settings
+        profile_response = supabase.table("profiles")\
+            .select("notification_habits, notification_hives, notification_social, timezone")\
+            .eq("id", user_id)\
+            .execute()
+
+        profile = (profile_response.data or [{}])[0]
+
+        return {
+            "user_id": user_id,
+            "devices": devices,
+            "device_count": len(devices),
+            "player_ids": [d["onesignal_player_id"] for d in devices if d.get("onesignal_player_id")],
+            "profile_settings": profile
+        }
+
+    except Exception as e:
+        logger.error(f"Error in debug endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch debug info: {str(e)}"
+        )

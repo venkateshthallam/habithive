@@ -75,7 +75,10 @@ class NotificationManager: NSObject, ObservableObject {
         // Store the token
         UserDefaults.standard.set(tokenString, forKey: deviceTokenKey)
 
-        print("📱 APNs Device Token: \(tokenString)")
+        print("📱 ===== APNs Token Received =====")
+        print("📱 Device Token: \(tokenString)")
+        print("📱 Token Length: \(tokenString.count) characters")
+        print("📱 ================================")
 
         // Register with backend
         Task {
@@ -103,6 +106,10 @@ class NotificationManager: NSObject, ObservableObject {
             let environment = "prod"
             #endif
 
+            print("🔄 Registering device with backend...")
+            print("🔄 Token: \(token)")
+            print("🔄 Environment: \(environment)")
+
             try await FastAPIClient.shared.registerDevice(
                 apnsToken: token,
                 environment: environment
@@ -112,9 +119,15 @@ class NotificationManager: NSObject, ObservableObject {
                 isRegistered = true
             }
 
+            print("✅ ===== Device Registration Success =====")
             print("✅ Device successfully registered with backend")
+            print("✅ Token is now linked to user account")
+            print("✅ ==========================================")
         } catch {
-            print("❌ Failed to register device with backend: \(error.localizedDescription)")
+            print("❌ ===== Device Registration Failed =====")
+            print("❌ Error: \(error.localizedDescription)")
+            print("❌ Token: \(token)")
+            print("❌ ========================================")
             isRegistered = false
         }
     }

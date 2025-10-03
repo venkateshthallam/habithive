@@ -6,6 +6,9 @@ Handles sending push notifications via OneSignal API
 from typing import List, Dict, Any, Optional
 import httpx
 from app.core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class OneSignalClient:
@@ -68,6 +71,12 @@ class OneSignalClient:
         payload["ios_badgeCount"] = 1
         payload["ios_sound"] = "default"
 
+        logger.info(f"📤 Sending OneSignal notification...")
+        logger.info(f"📤 Player IDs: {player_ids}")
+        logger.info(f"📤 Heading: {heading}")
+        logger.info(f"📤 Message: {message}")
+        logger.info(f"📤 Payload: {payload}")
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.base_url}/notifications",
@@ -75,8 +84,13 @@ class OneSignalClient:
                 json=payload,
                 timeout=30.0
             )
+
+            logger.info(f"📤 OneSignal notification response status: {response.status_code}")
+            response_data = response.json()
+            logger.info(f"📤 OneSignal notification response: {response_data}")
+
             response.raise_for_status()
-            return response.json()
+            return response_data
 
     async def send_habit_reminder(
         self,
@@ -112,7 +126,8 @@ class OneSignalClient:
     async def create_device(
         self,
         device_token: str,
-        device_type: int = 0  # 0 = iOS, 1 = Android
+        device_type: int = 0,  # 0 = iOS, 1 = Android
+        test_type: int = 1  # 1 = development, 2 = production
     ) -> Dict[str, Any]:
         """
         Register a device with OneSignal
@@ -120,6 +135,7 @@ class OneSignalClient:
         Args:
             device_token: APNs or FCM device token
             device_type: 0 for iOS, 1 for Android
+            test_type: 1 for development (sandbox), 2 for production
 
         Returns:
             OneSignal response with player_id
@@ -127,8 +143,17 @@ class OneSignalClient:
         payload = {
             "app_id": self.app_id,
             "device_type": device_type,
-            "identifier": device_token
+            "identifier": device_token,
+            "test_type": test_type,  # CRITICAL: Must match APNs environment
+            # Ensure device is subscribed to notifications
+            "notification_types": 1  # 1 = subscribed, -2 = unsubscribed
         }
+
+        logger.info(f"🔄 Creating OneSignal device...")
+        logger.info(f"🔄 App ID: {self.app_id}")
+        logger.info(f"🔄 Device Type: {device_type}")
+        logger.info(f"🔄 Test Type: {test_type} ({'sandbox' if test_type == 1 else 'production'})")
+        logger.info(f"🔄 Token: {device_token[:20]}...{device_token[-20:]}")
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -137,8 +162,19 @@ class OneSignalClient:
                 json=payload,
                 timeout=30.0
             )
+
+            logger.info(f"🔄 OneSignal response status: {response.status_code}")
+            response_data = response.json()
+            logger.info(f"🔄 OneSignal response: {response_data}")
+
+            # Check if device is subscribed
+            if response_data.get("notification_types", -2) == -2:
+                logger.warning("⚠️ Device created but NOT subscribed to notifications!")
+            else:
+                logger.info(f"✅ Device subscribed with notification_types: {response_data.get('notification_types')}")
+
             response.raise_for_status()
-            return response.json()
+            return response_data
 
 
 # Singleton instance
