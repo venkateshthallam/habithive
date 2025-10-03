@@ -835,7 +835,7 @@ final class FastAPIClient: ObservableObject {
         }
 
         let trimmedName = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let needsName = trimmedName.isEmpty || trimmedName.lowercased() == "new bee" || trimmedName.hasPrefix("Bee ")
+        let needsName = trimmedName.isDefaultHiveDisplayName
         let needsPhone = user.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         let needsSetup = needsName || needsPhone

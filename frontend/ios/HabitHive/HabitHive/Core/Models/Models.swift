@@ -703,3 +703,25 @@ struct HiveJoinResult {
     let hiveId: String?
     let message: String?
 }
+
+extension String {
+    /// Returns true when the string is empty, the default "New Bee" label,
+    /// or the auto-generated "Bee <UUID prefix>" used for brand-new accounts.
+    var isDefaultHiveDisplayName: Bool {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return true }
+
+        if trimmed.caseInsensitiveCompare("New Bee") == .orderedSame {
+            return true
+        }
+
+        let prefix = "Bee "
+        guard trimmed.hasPrefix(prefix) else { return false }
+
+        let suffix = trimmed.dropFirst(prefix.count)
+        guard suffix.count == 6 else { return false }
+
+        let allowed = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+        return suffix.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+}

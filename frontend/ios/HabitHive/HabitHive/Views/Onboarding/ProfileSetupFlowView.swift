@@ -35,8 +35,7 @@ struct ProfileSetupFlowView: View {
         _phoneNumber = State(initialValue: currentUser?.phone ?? "")
 
         if let currentUser {
-            let trimmedName = currentUser.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let needsName = trimmedName.isEmpty || trimmedName.lowercased() == "new bee" || trimmedName.hasPrefix("Bee ")
+            let needsName = currentUser.displayName.isDefaultHiveDisplayName
             let needsPhone = currentUser.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
             if needsName {
@@ -245,8 +244,7 @@ struct ProfileSetupFlowView: View {
         }
 
         if !hasAutoCompleted {
-            let trimmedName = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let needsName = trimmedName.isEmpty || trimmedName.lowercased() == "new bee" || trimmedName.hasPrefix("Bee ")
+            let needsName = user.displayName.isDefaultHiveDisplayName
             let needsPhone = user.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
             if needsName {
@@ -261,8 +259,7 @@ struct ProfileSetupFlowView: View {
         guard !hasAutoCompleted else { return }
         guard let user = apiClient.currentUser else { return }
 
-        let trimmedName = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasName = !trimmedName.isEmpty && trimmedName.lowercased() != "new bee" && !trimmedName.hasPrefix("Bee ")
+        let hasName = !user.displayName.isDefaultHiveDisplayName
         let hasPhone = !user.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         if hasName && hasPhone {
