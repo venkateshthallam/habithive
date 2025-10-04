@@ -96,11 +96,11 @@ export default function Support() {
               {[
                 {
                   q: 'How do I delete my account and data?',
-                  a: 'You can delete your account from the app by going to Profile > Settings > Account > Delete Account. All your data will be permanently deleted within 30 days. You can also request deletion by contacting support@habithive.app.',
+                  a: 'You can delete your account from the app by going to Profile → Settings → Account → Delete Account. All your data will be permanently deleted within 30 days. You can also request deletion by contacting support@habithive.app.',
                 },
                 {
                   q: 'How do I export my data?',
-                  a: 'Go to Profile > Settings > Privacy > Export Data. We'll email you a complete copy of your habit data, insights, and Hive information in JSON format within 24 hours.',
+                  a: 'Go to Profile → Settings → Privacy → Export Data. We\'ll email you a complete copy of your habit data, insights, and Hive information in JSON format within 24 hours.',
                 },
                 {
                   q: 'Can I use HabitHive without joining a Hive?',
@@ -120,7 +120,7 @@ export default function Support() {
                 },
                 {
                   q: 'Can I change my notification time?',
-                  a: 'Yes! Go to Profile > Settings > Notifications. You can customize reminder times for each individual habit.',
+                  a: 'Yes! Go to Profile → Settings → Notifications. You can customize reminder times for each individual habit.',
                 },
                 {
                   q: 'Is HabitHive free?',
