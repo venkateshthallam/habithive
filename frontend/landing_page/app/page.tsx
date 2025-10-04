@@ -364,10 +364,10 @@ export default function Home() {
               </span>
             </div>
             <div className="flex gap-8 text-gray-600">
-              <a href="#" className="hover:text-honey-600 transition-colors">About</a>
-              <a href="#" className="hover:text-honey-600 transition-colors">Features</a>
-              <a href="#" className="hover:text-honey-600 transition-colors">Privacy</a>
-              <a href="#" className="hover:text-honey-600 transition-colors">Terms</a>
+              <a href="/privacy" className="hover:text-honey-600 transition-colors">Privacy</a>
+              <a href="/terms" className="hover:text-honey-600 transition-colors">Terms</a>
+              <a href="/support" className="hover:text-honey-600 transition-colors">Support</a>
+              <a href="/account-deletion" className="hover:text-honey-600 transition-colors">Delete Account</a>
             </div>
             <div className="text-gray-600">
               © 2025 HabitHive. All rights reserved.
