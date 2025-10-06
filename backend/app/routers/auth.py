@@ -72,21 +72,33 @@ async def apple_signin(request: AppleSignInRequest):
             )
 
         # Profile should be created automatically by the trigger
-        # But let's make sure it exists
+        # But let's make sure it exists and update it with fullName if provided
         try:
             # First check if profile already exists
             existing_profile = supabase.table("profiles").select("id").eq("id", response.user.id).execute()
 
+            # Determine display name: prioritize client-provided fullName, then user_metadata, then default
+            display_name = (
+                request.full_name or
+                response.user.user_metadata.get("full_name") or
+                response.user.user_metadata.get("name") or
+                "New Bee"
+            )
+
             if not existing_profile.data:
                 # If no profile exists, the trigger might not have run
                 # Try to create it manually with proper service role client
-                display_name = response.user.user_metadata.get("full_name") or response.user.user_metadata.get("name") or "New Bee"
-
                 supabase.table("profiles").insert({
                     "id": response.user.id,
                     "display_name": display_name,
                     "theme": "honey"
                 }).execute()
+            elif request.full_name:
+                # Profile exists but client provided a fullName (first sign-in scenario)
+                # Update the profile with the real name
+                supabase.table("profiles").update({
+                    "display_name": display_name
+                }).eq("id", response.user.id).execute()
 
         except Exception as profile_error:
             print(f"Profile creation warning: {profile_error}")

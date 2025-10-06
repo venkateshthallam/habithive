@@ -777,14 +777,17 @@ class HiveDetailViewModel: ObservableObject {
 
     func deleteHive(hiveId: String) {
         Task {
-            await MainActor.run { self.isDeleting = true }
-
-            // Optimistically dismiss
-            await MainActor.run { self.didDelete = true }
+            await MainActor.run {
+                self.isDeleting = true
+                self.errorMessage = nil
+            }
 
             do {
                 try await api.deleteHive(hiveId: hiveId)
-                await MainActor.run { self.isDeleting = false }
+                await MainActor.run {
+                    self.isDeleting = false
+                    self.didDelete = true
+                }
             } catch {
                 await MainActor.run {
                     self.isDeleting = false

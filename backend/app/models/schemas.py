@@ -31,6 +31,8 @@ class VerifyOTPRequest(BaseModel):
 class AppleSignInRequest(BaseModel):
     id_token: str
     nonce: Optional[str] = None
+    full_name: Optional[str] = None
+    email: Optional[str] = None
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str

@@ -45,10 +45,14 @@ private struct VerifyOTPRequest: Encodable {
 private struct AppleSignInRequest: Encodable {
     let idToken: String
     let nonce: String?
+    let fullName: String?
+    let email: String?
 
     enum CodingKeys: String, CodingKey {
         case idToken = "id_token"
         case nonce
+        case fullName = "full_name"
+        case email
     }
 }
 
@@ -166,8 +170,8 @@ final class FastAPIClient: ObservableObject {
         await loadCurrentUser(force: true)
     }
 
-    func signInWithApple(idToken: String, nonce: String?) async throws {
-        let request = AppleSignInRequest(idToken: idToken, nonce: nonce)
+    func signInWithApple(idToken: String, nonce: String?, fullName: String? = nil, email: String? = nil) async throws {
+        let request = AppleSignInRequest(idToken: idToken, nonce: nonce, fullName: fullName, email: email)
         let response: AuthResponse = try await performRequest(
             path: "/api/auth/apple-signin",
             method: .post,

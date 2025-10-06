@@ -68,8 +68,8 @@ struct HivesView: View {
                                     NavigationLink(destination:
                                         HiveDetailView(hiveId: hive.id)
                                             .onDisappear {
-                                                // Refresh hives when returning from detail view
-                                                viewModel.loadHives()
+                                                // Force refresh so deletions/leaves show immediately
+                                                Task { await viewModel.refreshHives() }
                                             }
                                     ) {
                                         HiveCard(hive: hive, theme: themeManager.currentTheme)

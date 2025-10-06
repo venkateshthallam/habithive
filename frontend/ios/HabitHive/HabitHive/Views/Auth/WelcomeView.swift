@@ -86,8 +86,22 @@ struct WelcomeView: View {
                         throw AppleSignInError.invalidCredentials
                     }
 
+                    // Extract fullName and email (only available on first sign-in)
+                    var fullName: String?
+                    if let personName = appleIDCredential.fullName {
+                        let formatter = PersonNameComponentsFormatter()
+                        fullName = formatter.string(from: personName)
+                    }
+
+                    let email = appleIDCredential.email
+
                     // Use the real Apple ID token to create/authenticate user
-                    try await FastAPIClient.shared.signInWithApple(idToken: idTokenString, nonce: currentNonce)
+                    try await FastAPIClient.shared.signInWithApple(
+                        idToken: idTokenString,
+                        nonce: currentNonce,
+                        fullName: fullName,
+                        email: email
+                    )
 
                 case .failure(let error):
                     throw error
