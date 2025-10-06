@@ -84,6 +84,7 @@ final class FastAPIClient: ObservableObject {
     private let onboardingCompleteKey = "fastapi.onboardingComplete"
 
     private var accessTokenExpiry: Date?
+    private var refreshTimer: Timer?
     private var accessToken: String? {
         didSet {
             storeAccessToken(accessToken)
@@ -133,14 +134,96 @@ final class FastAPIClient: ObservableObject {
         }
         encoder.dateEncodingStrategy = .iso8601
 
-        // Load saved tokens
+        // Load saved tokens and attempt to restore session
         if let saved = UserDefaults.standard.string(forKey: sessionStorageKey) {
             let savedRefresh = UserDefaults.standard.string(forKey: refreshTokenStorageKey)
             Task { @MainActor in
                 accessToken = saved
                 refreshToken = savedRefresh
+
+                // Try to refresh token on app launch to ensure session is valid
+                await restoreSessionIfNeeded()
+            }
+        }
+    }
+
+    // MARK: - Session Management
+
+    @MainActor
+    private func restoreSessionIfNeeded() async {
+        guard let token = accessToken else { return }
+
+        // Decode token expiry
+        if accessTokenExpiry == nil {
+            accessTokenExpiry = decodeExpirationDate(from: token)
+        }
+
+        // Check if token is expired or will expire soon
+        if let expiry = accessTokenExpiry {
+            let timeUntilExpiry = expiry.timeIntervalSinceNow
+
+            // If token is expired or will expire within 1 hour, refresh it
+            if timeUntilExpiry <= 3600 {
+                print("🔄 Token expired or expiring soon, attempting refresh...")
+                do {
+                    try await refreshAccessToken()
+                    await loadCurrentUser()
+                } catch {
+                    print("❌ Session restoration failed: \(error)")
+                    // Don't logout yet - let the user try to use the app
+                    // If API calls fail, they'll be logged out then
+                }
+            } else {
+                // Token is still valid, just load user data
                 await loadCurrentUser()
             }
+        } else {
+            // Couldn't decode expiry, try to load user anyway
+            await loadCurrentUser()
+        }
+
+        // Start background refresh timer
+        scheduleTokenRefresh()
+    }
+
+    @MainActor
+    private func scheduleTokenRefresh() {
+        // Cancel existing timer
+        refreshTimer?.invalidate()
+
+        guard let expiry = accessTokenExpiry else { return }
+
+        // Calculate when to refresh (10 minutes before expiry)
+        let refreshTime = expiry.addingTimeInterval(-600) // 10 minutes before expiry
+        let timeUntilRefresh = refreshTime.timeIntervalSinceNow
+
+        // Only schedule if refresh time is in the future
+        if timeUntilRefresh > 0 {
+            print("⏰ Scheduling token refresh in \(Int(timeUntilRefresh / 60)) minutes")
+            refreshTimer = Timer.scheduledTimer(withTimeInterval: timeUntilRefresh, repeats: false) { [weak self] _ in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    await self.performBackgroundRefresh()
+                }
+            }
+        } else {
+            // Token is close to expiry, refresh immediately
+            Task { @MainActor in
+                await performBackgroundRefresh()
+            }
+        }
+    }
+
+    @MainActor
+    private func performBackgroundRefresh() async {
+        print("🔄 Performing background token refresh...")
+        do {
+            try await refreshAccessToken()
+            // Schedule next refresh
+            scheduleTokenRefresh()
+        } catch {
+            print("❌ Background refresh failed: \(error)")
+            // Will retry on next foreground or API call
         }
     }
 
@@ -203,8 +286,11 @@ final class FastAPIClient: ObservableObject {
     }
 
     func logout() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
         accessToken = nil
         refreshToken = nil
+        accessTokenExpiry = nil
         currentUser = nil
         hasLoadedProfile = false
         isLoadingProfile = false
@@ -319,10 +405,12 @@ final class FastAPIClient: ObservableObject {
             accessTokenExpiry = decodeExpirationDate(from: token)
         }
 
-        // Refresh if token expires in less than 5 minutes
-        if let expiry = accessTokenExpiry, expiry.timeIntervalSinceNow <= 300 {
+        // Refresh if token expires in less than 15 minutes
+        if let expiry = accessTokenExpiry, expiry.timeIntervalSinceNow <= 900 {
             do {
                 try await refreshAccessToken()
+                // Reschedule background refresh after successful manual refresh
+                scheduleTokenRefresh()
             } catch {
                 print("⚠️ Token refresh failed: \(error)")
                 // If refresh fails with 401, logout
@@ -935,6 +1023,12 @@ final class FastAPIClient: ObservableObject {
         accessToken = response.accessToken
         if let newRefresh = response.refreshToken {
             refreshToken = newRefresh.isEmpty ? nil : newRefresh
+        }
+
+        // Decode the new token's expiry and schedule refresh
+        accessTokenExpiry = decodeExpirationDate(from: response.accessToken)
+        Task { @MainActor in
+            scheduleTokenRefresh()
         }
     }
 
