@@ -1,13 +1,16 @@
 import SwiftUI
+import Combine
 #if canImport(UIKit)
 import UIKit
 #endif
 
 struct HabitsHomeView: View {
+    @EnvironmentObject private var session: AppSessionController
     @StateObject private var viewModel = HabitsViewModel()
     @StateObject private var themeManager = ThemeManager.shared
     @State private var showCreateHabit = false
     @State private var selectedHabit: Habit?
+    @State private var showGuestAuthAlert = false
     // Inline animation now lives inside BeeButton + Hex cells
 
     private var backgroundColor: Color {
@@ -49,7 +52,7 @@ struct HabitsHomeView: View {
                                             handleCounterDecrement(habit)
                                         },
                                         onOpen: {
-                                            selectedHabit = habit
+                                            handleHabitLongPress(habit)
                                         },
                                         onLongPress: {
                                             handleHabitLongPress(habit)
@@ -75,6 +78,12 @@ struct HabitsHomeView: View {
         }
         .sheet(item: $selectedHabit) { habit in
             HabitDetailView(habit: habit)
+        }
+        .alert("Sign In Required", isPresented: $showGuestAuthAlert) {
+            Button("Not now", role: .cancel) { }
+            Button("Sign In") { session.requestAuthentication() }
+        } message: {
+            Text("Create a free account to view detailed history and advanced insights.")
         }
         .onAppear {
             viewModel.loadHabits()
@@ -1219,23 +1228,34 @@ extension DateFormatter {
 }
 
 // MARK: - View Model
+@MainActor
 class HabitsViewModel: ObservableObject {
     @Published var habits: [Habit] = []
     @Published var isLoading = false
     @Published var errorMessage = ""
 
     private let apiClient = FastAPIClient.shared
+    private let localStore = LocalHabitStore.shared
+    private let session: AppSessionController
+    private var cancellables: Set<AnyCancellable> = []
     private var lastLoadedAt: Date?
     private let freshnessInterval: TimeInterval = 90
 
-    @MainActor
+    init(session: AppSessionController = .shared) {
+        self.session = session
+        session.$mode
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.loadHabits()
+            }
+            .store(in: &cancellables)
+    }
+
     var completedToday: Int {
         let today = todayKey
         return habits.filter { habit in
-            if let logs = habit.recentLogs {
-                return logs.contains { $0.logDate == today }
-            }
-            return false
+            guard let logs = habit.recentLogs else { return false }
+            return logs.contains { $0.logDate == today }
         }.count
     }
 
@@ -1243,25 +1263,41 @@ class HabitsViewModel: ObservableObject {
         habits.compactMap { $0.currentStreak }.max() ?? 0
     }
 
-    @MainActor
     var currentDayKey: String { todayKey }
 
-    @MainActor
     var userTimezone: TimeZone {
         guard let user = apiClient.currentUser else { return .current }
         return TimeZone(identifier: user.timezone) ?? .current
     }
 
-    @MainActor
     var dayStartHour: Int {
-        return apiClient.currentUser?.dayStartHour ?? 0
+        apiClient.currentUser?.dayStartHour ?? 0
     }
-    
+
     func loadHabits() {
         Task { await loadHabitsAsync(force: false) }
     }
 
-    @MainActor
+    func refreshHabits() async {
+        await loadHabitsAsync(force: true)
+    }
+
+    func addHabitOptimistically(_ habit: Habit) {
+        habits.insert(habit, at: 0)
+
+        if session.mode != .guest {
+            Task { await loadHabitsAsync(force: true) }
+        }
+    }
+
+    func removeHabitOptimistically(habitId: String) {
+        habits.removeAll { $0.id == habitId }
+
+        if session.mode != .guest {
+            Task { await loadHabitsAsync(force: true) }
+        }
+    }
+
     @discardableResult
     func optimisticToggle(habit: Habit, value: Int, adding: Bool) -> Bool {
         guard let idx = habits.firstIndex(where: { $0.id == habit.id }) else {
@@ -1271,23 +1307,22 @@ class HabitsViewModel: ObservableObject {
         var habitCopy = habits[idx]
         var logs = habitCopy.recentLogs ?? []
         let today = todayKey
+
         if let existingIndex = logs.firstIndex(where: { $0.logDate == today }) {
             if adding {
-                // Update existing log with new value
                 logs[existingIndex] = HabitLog(
                     id: logs[existingIndex].id,
                     habitId: habitCopy.id,
                     userId: habitCopy.userId,
                     logDate: today,
                     value: value,
-                    source: "manual",
+                    source: logs[existingIndex].source,
                     createdAt: logs[existingIndex].createdAt
                 )
                 habitCopy.recentLogs = logs
                 habits[idx] = habitCopy
                 return true
             } else {
-                // Remove existing log
                 logs.remove(at: existingIndex)
                 habitCopy.recentLogs = logs
                 habits[idx] = habitCopy
@@ -1311,44 +1346,19 @@ class HabitsViewModel: ObservableObject {
         }
     }
 
-    @MainActor
     func todayLog(for habitId: String) -> HabitLog? {
         guard let habit = habits.first(where: { $0.id == habitId }) else { return nil }
         let today = todayKey
         return habit.recentLogs?.first(where: { $0.logDate == today })
     }
-    
-    func refreshHabits() async {
-        await loadHabitsAsync(force: true)
-    }
 
-    func addHabitOptimistically(_ habit: Habit) {
-        // Add the habit to the beginning of the list for immediate display
-        habits.insert(habit, at: 0)
-
-        // Refresh the habits list to get the latest data from server
-        Task {
-            await loadHabitsAsync(force: true)
-        }
-    }
-
-    @MainActor
-    func removeHabitOptimistically(habitId: String) {
-        // Optimistically remove the habit from the list
-        habits.removeAll { $0.id == habitId }
-
-        // Refresh to ensure consistency with server
-        Task {
-            await loadHabitsAsync(force: true)
-        }
-    }
-
-    @MainActor
     private func loadHabitsAsync(force: Bool) async {
-        if !force,
-           let lastLoadedAt,
-           Date().timeIntervalSince(lastLoadedAt) < freshnessInterval,
-           !habits.isEmpty {
+        if session.mode == .guest {
+            await loadLocalHabits()
+            return
+        }
+
+        if !force, let lastLoadedAt, Date().timeIntervalSince(lastLoadedAt) < freshnessInterval {
             return
         }
 
@@ -1360,14 +1370,26 @@ class HabitsViewModel: ObservableObject {
             lastLoadedAt = Date()
             errorMessage = ""
         } catch {
-            self.errorMessage = error.localizedDescription
+            errorMessage = error.localizedDescription
             lastLoadedAt = nil
         }
 
         isLoading = false
     }
 
-    @MainActor
+    private func loadLocalHabits() async {
+        isLoading = true
+        do {
+            let localHabits = try await localStore.fetchHabits()
+            habits = localHabits
+            errorMessage = ""
+            lastLoadedAt = Date()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+
     private var todayKey: String {
         guard let user = apiClient.currentUser else {
             return DateFormatter.hiveDayFormatter.string(from: Date())
@@ -1384,100 +1406,110 @@ class HabitsViewModel: ObservableObject {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: adjusted)
     }
-    
+
     func logHabit(habitId: String, value: Int) {
-        Task {
-            do {
-                let result = try await apiClient.logHabit(habitId: habitId, value: value)
-                // Update only the specific habit with server response
-                await MainActor.run {
-                    if let idx = habits.firstIndex(where: { $0.id == habitId }) {
-                        var habitCopy = habits[idx]
-                        var logs = habitCopy.recentLogs ?? []
-                        let today = todayKey
-
-                        // Update or add the log with server data
-                        if let existingIndex = logs.firstIndex(where: { $0.logDate == today }) {
-                            logs[existingIndex] = HabitLog(
-                                id: result.id,
-                                habitId: habitId,
-                                userId: habitCopy.userId,
-                                logDate: result.logDate,
-                                value: result.value,
-                                source: result.source ?? "manual",
-                                createdAt: result.createdAt
-                            )
-                        } else {
-                            logs.append(HabitLog(
-                                id: result.id,
-                                habitId: habitId,
-                                userId: habitCopy.userId,
-                                logDate: result.logDate,
-                                value: result.value,
-                                source: result.source ?? "manual",
-                                createdAt: result.createdAt
-                            ))
-                        }
-                        habitCopy.recentLogs = logs
-                        habits[idx] = habitCopy
-                    }
-                }
-
-                // Silent background refresh to sync any streak/completion changes
-                await silentRefresh()
-            } catch {
-                await MainActor.run {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if self.session.mode == .guest {
+                do {
+                    let result = try await self.localStore.logHabit(habitId: habitId, value: value)
+                    self.applyLogResult(result, habitId: habitId)
+                } catch {
                     self.errorMessage = error.localizedDescription
-                    // Revert optimistic update on error
-                    Task { await refreshHabits() }
+                    await self.refreshHabits()
                 }
+                return
+            }
+
+            do {
+                let result = try await self.apiClient.logHabit(habitId: habitId, value: value)
+                self.applyLogResult(result, habitId: habitId)
+                await self.silentRefresh()
+            } catch {
+                self.errorMessage = error.localizedDescription
+                await self.refreshHabits()
             }
         }
     }
 
     func deleteHabitLog(habitId: String, logDateString: String) {
         let logDate = DateFormatter.hiveDayFormatter.date(from: logDateString)
-        Task {
-            do {
-                try await apiClient.deleteHabitLog(habitId: habitId, logDate: logDate)
-
-                // Silent background refresh to sync any streak/completion changes
-                await silentRefresh()
-            } catch {
-                await MainActor.run {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if self.session.mode == .guest {
+                do {
+                    try await self.localStore.deleteHabitLog(habitId: habitId, logDate: logDateString)
+                } catch {
                     self.errorMessage = error.localizedDescription
-                    // Revert optimistic update on error
-                    Task { await refreshHabits() }
+                    await self.refreshHabits()
                 }
+                return
+            }
+
+            do {
+                try await self.apiClient.deleteHabitLog(habitId: habitId, logDate: logDate)
+                await self.silentRefresh()
+            } catch {
+                self.errorMessage = error.localizedDescription
+                await self.refreshHabits()
             }
         }
     }
 
     private func silentRefresh() async {
+        if session.mode == .guest {
+            await loadLocalHabits()
+            return
+        }
+
         do {
             let freshHabits = try await apiClient.getHabits(includeLogs: true, days: 30)
-            await MainActor.run {
-                // Update habits while preserving UI state (no loading indicator)
-                self.habits = freshHabits
-                lastLoadedAt = Date()
-            }
+            habits = freshHabits
+            lastLoadedAt = Date()
         } catch {
-            // Silent fail - optimistic update already shown
+            // Ignore: optimistic update already applied
         }
     }
-    
+
     func deleteHabit(habitId: String) {
-        Task {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if self.session.mode == .guest {
+                do {
+                    try await self.localStore.deleteHabit(id: habitId)
+                    self.habits.removeAll { $0.id == habitId }
+                } catch {
+                    self.errorMessage = error.localizedDescription
+                    await self.refreshHabits()
+                }
+                return
+            }
+
             do {
-                try await apiClient.deleteHabit(habitId: habitId)
-                await refreshHabits()
+                try await self.apiClient.deleteHabit(habitId: habitId)
+                await self.refreshHabits()
             } catch {
-                await MainActor.run { self.errorMessage = error.localizedDescription }
+                self.errorMessage = error.localizedDescription
             }
         }
+    }
+
+    private func applyLogResult(_ result: HabitLog, habitId: String) {
+        guard let idx = habits.firstIndex(where: { $0.id == habitId }) else { return }
+        var habitCopy = habits[idx]
+        var logs = habitCopy.recentLogs ?? []
+
+        if let existingIndex = logs.firstIndex(where: { $0.logDate == result.logDate }) {
+            logs[existingIndex] = result
+        } else {
+            logs.append(result)
+        }
+        habitCopy.recentLogs = logs
+        habits[idx] = habitCopy
     }
 }
 
 #Preview {
     HabitsHomeView()
+        .environmentObject(AppSessionController.shared)
 }

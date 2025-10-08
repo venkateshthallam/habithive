@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct MainTabView: View {
     @StateObject private var themeManager = ThemeManager.shared
@@ -38,6 +39,7 @@ struct MainTabView: View {
 
 // MARK: - Hives View
 struct HivesView: View {
+    @EnvironmentObject private var session: AppSessionController
     @StateObject private var themeManager = ThemeManager.shared
     @StateObject private var viewModel = HivesViewModel()
     @State private var showCreateHive = false
@@ -49,6 +51,16 @@ struct HivesView: View {
     }
 
     var body: some View {
+        Group {
+            if session.mode == .guest {
+                guestGate
+            } else {
+                authenticatedContent
+            }
+        }
+    }
+
+    private var authenticatedContent: some View {
         NavigationStack {
             ZStack {
                 backgroundColor
@@ -68,7 +80,6 @@ struct HivesView: View {
                                     NavigationLink(destination:
                                         HiveDetailView(hiveId: hive.id)
                                             .onDisappear {
-                                                // Force refresh so deletions/leaves show immediately
                                                 Task { await viewModel.refreshHives() }
                                             }
                                     ) {
@@ -94,7 +105,6 @@ struct HivesView: View {
                 viewModel.loadHives()
             }
             .onReceive(NotificationCenter.default.publisher(for: Notification.Name("hiveCreated"))) { notification in
-                print("🐝 HivesView: Received hiveCreated notification, hiveId: \(notification.object ?? "nil")")
                 Task { await viewModel.refreshHives() }
             }
             .sheet(isPresented: $showJoinHive, onDismiss: {
@@ -109,7 +119,59 @@ struct HivesView: View {
                     viewModel.loadHives()
                 }
             }
+            .onReceive(session.$mode) { newMode in
+                if newMode == .authenticated {
+                    viewModel.loadHives()
+                }
+            }
         }
+    }
+
+    private var guestGate: some View {
+        ScrollView {
+            VStack(spacing: HiveSpacing.xl) {
+                Spacer(minLength: HiveSpacing.xl)
+
+                Image(systemName: "person.2.square.stack")
+                    .font(.system(size: 72, weight: .bold))
+                    .foregroundStyle(themeManager.currentTheme.primaryGradient)
+                    .padding(.bottom, HiveSpacing.md)
+
+                VStack(spacing: HiveSpacing.sm) {
+                    Text("Hives require an account")
+                        .font(HiveTypography.title2)
+                        .fontWeight(.semibold)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(themeManager.currentTheme.primaryTextColor)
+
+                    Text("Sign in to form hives with friends, share streaks, and cheer each other on.")
+                        .font(HiveTypography.body)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                        .padding(.horizontal, HiveSpacing.lg)
+                }
+
+                Button {
+                    session.requestAuthentication()
+                } label: {
+                    Text("Sign in to unlock")
+                        .font(HiveTypography.headline)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, HiveSpacing.xl)
+                        .padding(.vertical, HiveSpacing.md)
+                        .background(themeManager.currentTheme.primaryGradient)
+                        .cornerRadius(HiveRadius.modal)
+                        .shadow(color: HiveColors.honeyGradientEnd.opacity(0.25), radius: 18, x: 0, y: 10)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, HiveSpacing.lg)
+            .padding(.top, HiveSpacing.xl)
+        }
+        .background(backgroundColor.ignoresSafeArea())
     }
 
     private var summaryCard: some View {
@@ -587,6 +649,7 @@ enum HiveJoinStatus: Equatable {
     case failure(message: String)
 }
 
+@MainActor
 class HivesViewModel: ObservableObject {
     @Published var hives: [Hive] = []
     @Published var leaderboard: [HiveLeaderboardEntry] = []
@@ -601,6 +664,7 @@ class HivesViewModel: ObservableObject {
     @Published var joinStatus: HiveJoinStatus = .idle
 
     private let apiClient = FastAPIClient.shared
+    private let session = AppSessionController.shared
     private var lastLoadedAt: Date?
     private let freshnessInterval: TimeInterval = 120
 
@@ -610,6 +674,12 @@ class HivesViewModel: ObservableObject {
 
     @MainActor
     func joinHive(code: String) async {
+        guard session.mode != .guest else {
+            joinStatus = .failure(message: "Sign in to join a hive.")
+            session.requestAuthentication()
+            return
+        }
+
         let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
 
         guard !normalized.isEmpty else {
@@ -642,6 +712,19 @@ class HivesViewModel: ObservableObject {
     @MainActor
     private func loadHivesAsync(force: Bool) async {
         print("🔍 HivesViewModel: loadHivesAsync called with force=\(force)")
+
+        guard session.mode != .guest else {
+            isLoading = false
+            hives = []
+            leaderboard = []
+            overallCompletion = 0
+            completedToday = 0
+            weeklyProgress = Array(repeating: 0, count: 7)
+            currentStreaks = []
+            yearComb = [:]
+            bestPerformer = nil
+            return
+        }
 
         if !force,
            let lastLoadedAt,
@@ -721,6 +804,7 @@ class HivesViewModel: ObservableObject {
 // MARK: - Insights View
 
 struct InsightsView: View {
+    @EnvironmentObject private var session: AppSessionController
     @StateObject private var themeManager = ThemeManager.shared
     @StateObject private var viewModel = InsightsViewModel()
 
@@ -729,6 +813,16 @@ struct InsightsView: View {
     }
 
     var body: some View {
+        Group {
+            if session.mode == .guest {
+                guestInsightsGate
+            } else {
+                insightsContentView
+            }
+        }
+    }
+
+    private var insightsContentView: some View {
         NavigationStack {
             ZStack {
                 backgroundColor
@@ -741,6 +835,58 @@ struct InsightsView: View {
         .onAppear {
             viewModel.loadInsights()
         }
+        .onReceive(session.$mode) { newMode in
+            if newMode == .authenticated {
+                viewModel.loadInsights()
+            }
+        }
+    }
+
+    private var guestInsightsGate: some View {
+        ScrollView {
+            VStack(spacing: HiveSpacing.xl) {
+                Spacer(minLength: HiveSpacing.xl)
+
+                Image(systemName: "chart.bar.fill")
+                    .font(.system(size: 68, weight: .bold))
+                    .foregroundStyle(themeManager.currentTheme.primaryGradient)
+                    .padding(.bottom, HiveSpacing.md)
+
+                VStack(spacing: HiveSpacing.sm) {
+                    Text("Insights sync across devices")
+                        .font(HiveTypography.title2)
+                        .fontWeight(.semibold)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(themeManager.currentTheme.primaryTextColor)
+
+                    Text("Create a free account to back up your progress and unlock performance charts, streaks, and year combs.")
+                        .font(HiveTypography.body)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                        .padding(.horizontal, HiveSpacing.lg)
+                }
+
+                Button {
+                    session.requestAuthentication()
+                } label: {
+                    Text("Sign in to view insights")
+                        .font(HiveTypography.headline)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, HiveSpacing.xl)
+                        .padding(.vertical, HiveSpacing.md)
+                        .background(themeManager.currentTheme.primaryGradient)
+                        .cornerRadius(HiveRadius.modal)
+                        .shadow(color: HiveColors.honeyGradientEnd.opacity(0.25), radius: 18, x: 0, y: 10)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, HiveSpacing.lg)
+            .padding(.top, HiveSpacing.xl)
+        }
+        .background(backgroundColor.ignoresSafeArea())
     }
 
     @ViewBuilder
@@ -1091,6 +1237,7 @@ private struct HabitPerformanceRow: View {
 }
 
 
+@MainActor
 class InsightsViewModel: ObservableObject {
     @Published var dashboard: InsightsDashboard?
     @Published var selectedRange: InsightRange = .week
@@ -1101,19 +1248,35 @@ class InsightsViewModel: ObservableObject {
     @Published var selectedHeatmapFilterID: String = HeatmapFilterOption.allID
 
     private let apiClient = FastAPIClient.shared
+    private let session = AppSessionController.shared
     private var lastLoadedAt: Date?
     private let freshnessInterval: TimeInterval = 120
 
     func loadInsights() {
+        if session.mode == .guest {
+            dashboard = nil
+            yearOverview = nil
+            heatmapFilters = []
+            selectedHeatmapFilterID = HeatmapFilterOption.allID
+            errorMessage = ""
+            isLoading = false
+            return
+        }
         Task { await loadInsightsAsync(force: false) }
     }
 
     func refreshInsights() async {
+        guard session.mode != .guest else { return }
         await loadInsightsAsync(force: true)
     }
 
     @MainActor
     private func loadInsightsAsync(force: Bool) async {
+        guard session.mode != .guest else {
+            isLoading = false
+            return
+        }
+
         if !force,
            let lastLoadedAt,
            Date().timeIntervalSince(lastLoadedAt) < freshnessInterval,
@@ -1223,7 +1386,7 @@ struct CreateHiveFromHabitView: View {
                     if viewModel.isLoading {
                         HStack {
                             ProgressView()
-                            Text("Loading habits...")
+                            Text("Loading habits…")
                                 .font(HiveTypography.body)
                                 .foregroundColor(themeManager.currentTheme.secondaryTextColor)
                         }
@@ -1346,7 +1509,9 @@ struct CreateHiveFromHabitView: View {
         }
     }
 }
+
 struct ProfileView: View {
+    @EnvironmentObject private var session: AppSessionController
     @StateObject private var themeManager = ThemeManager.shared
     @StateObject private var apiClient = FastAPIClient.shared
     @StateObject private var viewModel = ProfileViewModel()
@@ -1359,7 +1524,31 @@ struct ProfileView: View {
         themeManager.currentTheme == .night ? themeManager.currentTheme.backgroundColor : HiveColors.creamBase
     }
 
-var body: some View {
+    var body: some View {
+        Group {
+            if session.mode == .guest {
+                guestProfile
+            } else {
+                authenticatedProfile
+            }
+        }
+        .onReceive(session.$mode) { mode in
+            if mode == .authenticated || mode == .authenticatedNeedsProfile {
+                viewModel.loadProfile()
+            } else if mode == .guest {
+                viewModel.prepareGuestProfile()
+            }
+        }
+        .onAppear {
+            if session.mode == .authenticated || session.mode == .authenticatedNeedsProfile {
+                viewModel.loadProfile()
+            } else {
+                viewModel.prepareGuestProfile()
+            }
+        }
+    }
+
+    private var authenticatedProfile: some View {
         NavigationView {
             ZStack {
                 backgroundColor
@@ -1367,7 +1556,7 @@ var body: some View {
 
                 ScrollView {
                     VStack(spacing: HiveSpacing.xl) {
-                        // Profile header with enhanced styling
+                        // Profile header
                         VStack(spacing: HiveSpacing.lg) {
                             ZStack {
                                 Circle()
@@ -1426,7 +1615,6 @@ var body: some View {
                         .padding(.horizontal, HiveSpacing.lg)
                         .padding(.top, HiveSpacing.xl)
 
-                        // Settings card with enhanced styling
                         VStack(spacing: 0) {
                             SettingsRow(
                                 icon: "bell",
@@ -1511,49 +1699,9 @@ var body: some View {
                     }
                 }
             }
-            }
             .navigationBarTitle("Profile", displayMode: .inline)
-            .onAppear {
-                viewModel.loadProfile()
-            }
             .sheet(isPresented: $viewModel.showTimeSelector) {
-                NavigationStack {
-                    VStack(spacing: HiveSpacing.lg) {
-                        Text("When does your day start?")
-                            .font(HiveTypography.title2)
-                            .foregroundColor(HiveColors.slateText)
-                            .padding(.top)
-
-                        DatePicker(
-                            "Day Start Time",
-                            selection: $viewModel.selectedStartTime,
-                            displayedComponents: .hourAndMinute
-                        )
-                        .datePickerStyle(.wheel)
-
-                        Button("Save") {
-                            viewModel.saveDayStartTime()
-                        }
-                        .font(HiveTypography.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, HiveSpacing.md)
-                        .background(themeManager.currentTheme.primaryGradient)
-                        .cornerRadius(HiveRadius.large)
-
-                        Spacer()
-                    }
-                    .padding()
-                    .navigationTitle("Day Start Time")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Cancel") {
-                                viewModel.showTimeSelector = false
-                            }
-                        }
-                    }
-                }
+                dayStartPicker
             }
             .confirmationDialog(
                 "Delete Account?",
@@ -1587,6 +1735,139 @@ var body: some View {
             }
         }
     }
+    private var guestProfile: some View {
+        NavigationView {
+            ZStack {
+                backgroundColor
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: HiveSpacing.xl) {
+                        VStack(spacing: HiveSpacing.lg) {
+                            Text("You're buzzing solo 🐝")
+                                .font(HiveTypography.title2)
+                                .fontWeight(.bold)
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(themeManager.currentTheme.primaryTextColor)
+
+                            Text("Create a free HabitHive account to back up your habits, invite friends, and see insights across devices.")
+                                .font(HiveTypography.body)
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                                .padding(.horizontal, HiveSpacing.lg)
+
+                            Button {
+                                session.requestAuthentication()
+                            } label: {
+                                Text("Sign in to sync")
+                                    .font(HiveTypography.headline)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, HiveSpacing.xl)
+                                    .padding(.vertical, HiveSpacing.md)
+                                    .background(themeManager.currentTheme.primaryGradient)
+                                    .cornerRadius(HiveRadius.modal)
+                                    .shadow(color: HiveColors.honeyGradientEnd.opacity(0.25), radius: 18, x: 0, y: 10)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(HiveSpacing.lg)
+                        .background(
+                            RoundedRectangle(cornerRadius: HiveRadius.xlarge)
+                                .fill(themeManager.currentTheme.cardBackgroundColor)
+                                .shadow(color: Color.black.opacity(themeManager.currentTheme == .night ? 0.4 : 0.1), radius: 12, x: 0, y: 6)
+                        )
+                        .padding(.horizontal, HiveSpacing.lg)
+                        .padding(.top, HiveSpacing.xl)
+
+                        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+                            Text("Local Preferences")
+                                .font(HiveTypography.title3)
+                                .fontWeight(.semibold)
+                                .foregroundColor(themeManager.currentTheme.primaryTextColor)
+
+                            SettingsRow(
+                                icon: "bell",
+                                title: "Notifications require an account",
+                                action: {
+                                    session.requestAuthentication()
+                                },
+                                theme: themeManager.currentTheme
+                            )
+
+                            Divider().background(themeManager.currentTheme.secondaryTextColor.opacity(0.15))
+
+                            SettingsRow(
+                                icon: "clock",
+                                title: "Day Start Time",
+                                value: viewModel.dayStartTime,
+                                action: {
+                                    viewModel.showTimeSelector = true
+                                },
+                                theme: themeManager.currentTheme
+                            )
+                        }
+                        .background(
+                            RoundedRectangle(cornerRadius: HiveRadius.xlarge)
+                                .fill(themeManager.currentTheme.cardBackgroundColor)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: HiveRadius.xlarge)
+                                        .stroke(themeManager.currentTheme.secondaryTextColor.opacity(0.15), lineWidth: 1)
+                                )
+                                .shadow(color: Color.black.opacity(themeManager.currentTheme == .night ? 0.35 : 0.08), radius: 12, x: 0, y: 6)
+                        )
+                        .padding(.horizontal, HiveSpacing.lg)
+
+                        Spacer(minLength: 120)
+                    }
+                }
+            }
+            .navigationTitle("Profile")
+            .sheet(isPresented: $viewModel.showTimeSelector) {
+                dayStartPicker
+            }
+        }
+    }
+
+    private var dayStartPicker: some View {
+        NavigationStack {
+            VStack(spacing: HiveSpacing.lg) {
+                Text("When does your day start?")
+                    .font(HiveTypography.title2)
+                    .foregroundColor(HiveColors.slateText)
+                    .padding(.top)
+
+                DatePicker(
+                    "Day Start Time",
+                    selection: $viewModel.selectedStartTime,
+                    displayedComponents: .hourAndMinute
+                )
+                .datePickerStyle(.wheel)
+
+                Button("Save") {
+                    viewModel.saveDayStartTime()
+                }
+                .font(HiveTypography.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, HiveSpacing.md)
+                .background(themeManager.currentTheme.primaryGradient)
+                .cornerRadius(HiveRadius.large)
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Day Start Time")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        viewModel.showTimeSelector = false
+                    }
+                }
+            }
+        }
+    }
+}
 
 struct SettingsRow: View {
     let icon: String
@@ -1794,6 +2075,7 @@ struct EditProfileSheet: View {
 }
 
 
+@MainActor
 class ProfileViewModel: ObservableObject {
     @Published var displayName = "Bee"
     @Published var phone = ""
@@ -1809,6 +2091,24 @@ class ProfileViewModel: ObservableObject {
     @Published var updateError: String?
 
     private let apiClient = FastAPIClient.shared
+    private let session = AppSessionController.shared
+    private let defaults = UserDefaults.standard
+    private let guestDisplayNameKey = "guest.profile.displayName"
+    private let guestPhoneKey = "guest.profile.phone"
+    private let guestDayStartKey = "guest.profile.dayStartHour"
+    private let guestNotificationsKey = "guest.profile.notificationsEnabled"
+
+    init() {
+        defaults.register(defaults: [
+            guestDisplayNameKey: "Bee",
+            guestPhoneKey: "",
+            guestDayStartKey: 4,
+            guestNotificationsKey: true
+        ])
+        if session.mode != .authenticated {
+            prepareGuestProfile()
+        }
+    }
 
     var dayStartTime: String {
         let formatter = DateFormatter()
@@ -1818,11 +2118,30 @@ class ProfileViewModel: ObservableObject {
         return formatter.string(from: dateWithHour)
     }
 
+    func prepareGuestProfile() {
+        displayName = defaults.string(forKey: guestDisplayNameKey) ?? "Bee"
+        phone = defaults.string(forKey: guestPhoneKey) ?? ""
+        dayStartHour = defaults.object(forKey: guestDayStartKey) as? Int ?? 4
+        notificationsEnabled = defaults.object(forKey: guestNotificationsKey) as? Bool ?? true
+        let calendar = Calendar.current
+        selectedStartTime = calendar.date(bySettingHour: dayStartHour, minute: 0, second: 0, of: Date()) ?? Date()
+        isLoading = false
+    }
+
     func loadProfile() {
+        guard session.mode == .authenticated else {
+            prepareGuestProfile()
+            return
+        }
         Task { await loadProfileAsync() }
     }
 
     func updateDisplayName(_ name: String) {
+        guard session.mode == .authenticated else {
+            defaults.set(name, forKey: guestDisplayNameKey)
+            displayName = name
+            return
+        }
         let update = ProfileUpdate(displayName: name)
         Task {
             do {
@@ -1835,6 +2154,14 @@ class ProfileViewModel: ObservableObject {
     }
 
     func updateProfile(displayName: String, phone: String) async -> Bool {
+        if session.mode != .authenticated {
+            defaults.set(displayName, forKey: guestDisplayNameKey)
+            defaults.set(phone, forKey: guestPhoneKey)
+            self.displayName = displayName
+            self.phone = phone
+            return true
+        }
+
         await MainActor.run {
             isUpdatingProfile = true
             updateError = nil
@@ -1869,13 +2196,25 @@ class ProfileViewModel: ObservableObject {
     }
 
     func toggleNotifications() {
+        guard session.mode == .authenticated else {
+            session.requestAuthentication()
+            return
+        }
         notificationsEnabled.toggle()
+        defaults.set(notificationsEnabled, forKey: guestNotificationsKey)
     }
 
     func saveDayStartTime() {
         let calendar = Calendar.current
         let hour = calendar.component(.hour, from: selectedStartTime)
         dayStartHour = hour
+        selectedStartTime = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: Date()) ?? Date()
+
+        if session.mode != .authenticated {
+            defaults.set(hour, forKey: guestDayStartKey)
+            showTimeSelector = false
+            return
+        }
 
         let update = ProfileUpdate(dayStartHour: hour)
         Task {
@@ -1890,18 +2229,20 @@ class ProfileViewModel: ObservableObject {
     }
 
     func requestDeleteAccount() {
-        guard !isDeletingAccount else { return }
+        guard session.mode == .authenticated, !isDeletingAccount else {
+            if session.mode != .authenticated {
+                session.requestAuthentication()
+            }
+            return
+        }
         showDeleteConfirmation = true
     }
 
     func confirmDeleteAccount() {
-        guard !isDeletingAccount else { return }
-        Task {
-            await deleteAccountAsync()
-        }
+        guard session.mode == .authenticated, !isDeletingAccount else { return }
+        Task { await deleteAccountAsync() }
     }
 
-    @MainActor
     private func deleteAccountAsync() async {
         isDeletingAccount = true
         deleteError = nil
@@ -1919,7 +2260,6 @@ class ProfileViewModel: ObservableObject {
         }
     }
 
-    @MainActor
     private func loadProfileAsync() async {
         isLoading = true
         defer { isLoading = false }
@@ -1928,15 +2268,17 @@ class ProfileViewModel: ObservableObject {
             displayName = user.displayName
             phone = user.phone
             dayStartHour = user.dayStartHour
-
             let calendar = Calendar.current
             selectedStartTime = calendar.date(bySettingHour: self.dayStartHour, minute: 0, second: 0, of: Date()) ?? Date()
+            defaults.set(user.displayName, forKey: guestDisplayNameKey)
+            defaults.set(user.phone, forKey: guestPhoneKey)
+            defaults.set(user.dayStartHour, forKey: guestDayStartKey)
+            defaults.set(true, forKey: guestNotificationsKey)
         } catch {
             print("Failed to load profile: \(error)")
         }
     }
 }
-
 class CreateHiveViewModel: ObservableObject {
     @Published var habits: [Habit] = []
     @Published var isLoading = false
@@ -1977,6 +2319,7 @@ class CreateHiveViewModel: ObservableObject {
 
 #Preview {
     MainTabView()
+        .environmentObject(AppSessionController.shared)
 }
 
 // MARK: - Year Heatmap View

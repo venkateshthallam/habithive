@@ -316,7 +316,16 @@ final class FastAPIClient: ObservableObject {
 
     func loadCurrentUser(force: Bool = false) async {
         guard isAuthenticated else { return }
-        if isLoadingProfile && !force { return }
+        if isLoadingProfile && !force {
+            print("⏭️ Skipping loadCurrentUser - already loading")
+            return
+        }
+
+        // If we already have a user and this is not a forced refresh, skip
+        if !force && hasLoadedProfile && currentUser != nil {
+            print("⏭️ Skipping loadCurrentUser - already loaded")
+            return
+        }
 
         isLoadingProfile = true
         defer {
@@ -325,6 +334,7 @@ final class FastAPIClient: ObservableObject {
         }
 
         do {
+            print("📡 Fetching current user profile...")
             let profile: ProfileRecord = try await performRequest(
                 path: "/api/profiles/me",
                 method: .get,
@@ -348,8 +358,9 @@ final class FastAPIClient: ObservableObject {
 
             currentUser = user
             evaluateProfileSetup(for: user)
+            print("✅ Profile loaded successfully")
         } catch {
-            print("Failed to load current user: \(error)")
+            print("❌ Failed to load current user: \(error)")
         }
     }
 
@@ -942,7 +953,9 @@ final class FastAPIClient: ObservableObject {
 
     private func evaluateProfileSetup(for user: User) {
         if hasStoredOnboardingCompletion {
-            requiresProfileSetup = false
+            if requiresProfileSetup {
+                requiresProfileSetup = false
+            }
             return
         }
 
@@ -951,7 +964,11 @@ final class FastAPIClient: ObservableObject {
         let needsPhone = user.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         let needsSetup = needsName || needsPhone
-        requiresProfileSetup = needsSetup
+
+        // Only update if the value actually changes to prevent cascading updates
+        if requiresProfileSetup != needsSetup {
+            requiresProfileSetup = needsSetup
+        }
 
         if !needsSetup {
             persistOnboardingCompletion()

@@ -2,6 +2,7 @@ import SwiftUI
 import AuthenticationServices
 
 struct WelcomeView: View {
+    @EnvironmentObject private var session: AppSessionController
     @StateObject private var themeManager = ThemeManager.shared
     @State private var isProcessing = false
     @State private var errorMessage: String?
@@ -63,8 +64,24 @@ struct WelcomeView: View {
                         .frame(maxWidth: 375)
                         .frame(maxWidth: .infinity)
                         .cornerRadius(HiveRadius.xlarge)
-                        .disabled(isProcessing)
+                            .disabled(isProcessing)
                     }
+
+                    Button(role: .cancel) {
+                        session.enterGuestMode()
+                    } label: {
+                        Text("Continue as Guest")
+                            .font(HiveTypography.body)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, HiveSpacing.md)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: HiveRadius.xlarge)
+                                    .stroke(Color.white.opacity(0.6), lineWidth: 1.5)
+                            )
+                    }
+                    .padding(.top, HiveSpacing.sm)
                 }
                 .padding(.horizontal, HiveSpacing.lg)
                 .padding(.bottom, HiveSpacing.xl)

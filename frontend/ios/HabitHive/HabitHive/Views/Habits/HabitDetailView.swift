@@ -8,6 +8,7 @@ extension Notification.Name {
 struct HabitDetailView: View {
     let habit: Habit
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var session: AppSessionController
     @StateObject private var viewModel = HabitDetailViewModel()
     @StateObject private var themeManager = ThemeManager.shared
     @State private var selectedMonth = Date()
@@ -276,38 +277,40 @@ struct HabitDetailView: View {
     
     private var actionButtons: some View {
         VStack(spacing: HiveSpacing.sm) {
-            // Convert to Hive
-            Button(action: {
-                viewModel.convertToHive(habitId: currentHabit.id) { success, message in
-                    isErrorToast = !success
-                    toastMessage = message
-                }
-            }) {
-                HStack {
-                    if viewModel.isConvertingToHive {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle())
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "person.2.fill")
+            // Convert to Hive - only show for authenticated users
+            if session.mode != .guest {
+                Button(action: {
+                    viewModel.convertToHive(habitId: currentHabit.id) { success, message in
+                        isErrorToast = !success
+                        toastMessage = message
                     }
-                    Text("Create a Hive")
-                    Spacer()
-                    if !viewModel.isConvertingToHive {
-                        Image(systemName: "arrow.right")
+                }) {
+                    HStack {
+                        if viewModel.isConvertingToHive {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "person.2.fill")
+                        }
+                        Text("Create a Hive")
+                        Spacer()
+                        if !viewModel.isConvertingToHive {
+                            Image(systemName: "arrow.right")
+                        }
                     }
+                    .font(HiveTypography.callout)
+                    .foregroundColor(HiveColors.slateText)
+                    .padding(HiveSpacing.md)
+                    .background(
+                        RoundedRectangle(cornerRadius: HiveRadius.medium)
+                            .fill(Color.white)
+                            .shadow(color: .black.opacity(0.05), radius: 3)
+                    )
                 }
-                .font(HiveTypography.callout)
-                .foregroundColor(HiveColors.slateText)
-                .padding(HiveSpacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: HiveRadius.medium)
-                        .fill(Color.white)
-                        .shadow(color: .black.opacity(0.05), radius: 3)
-                )
+                .disabled(viewModel.isConvertingToHive)
             }
-            .disabled(viewModel.isConvertingToHive)
-            
+
             // Delete Habit
             Button(action: {
                 showDeleteAlert = true
@@ -503,6 +506,7 @@ struct DayCell: View {
 }
 
 // MARK: - View Model
+@MainActor
 class HabitDetailViewModel: ObservableObject {
     @Published var habit: Habit?
     @Published var logs: [HabitLog] = []
@@ -514,6 +518,8 @@ class HabitDetailViewModel: ObservableObject {
     @Published var errorMessage = ""
 
     private let apiClient = FastAPIClient.shared
+    private let localStore = LocalHabitStore.shared
+    private let session = AppSessionController.shared
 
     var todayProgress: CGFloat {
         guard let habit else { return isCompletedToday ? 1 : 0 }
@@ -522,7 +528,6 @@ class HabitDetailViewModel: ObservableObject {
         return CGFloat(min(todayValue, target)) / CGFloat(target)
     }
 
-    @MainActor
     func configure(with habit: Habit) {
         self.habit = habit
         self.logs = habit.recentLogs ?? []
@@ -533,68 +538,84 @@ class HabitDetailViewModel: ObservableObject {
         Task { await loadHabitDetailsAsync(habitId: habitId) }
     }
 
-    @MainActor
     private func loadHabitDetailsAsync(habitId: String) async {
         isLoading = true
         defer { isLoading = false }
+
+        if session.mode == .guest {
+            do {
+                if let habit = try await localStore.habit(for: habitId) {
+                    self.habit = habit
+                    self.logs = habit.recentLogs ?? []
+                    calculateStats(for: habit)
+                } else {
+                    errorMessage = "Habit not found."
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            return
+        }
 
         do {
             let habit = try await apiClient.getHabit(habitId: habitId, includeLogs: true)
             self.habit = habit
             self.logs = habit.recentLogs ?? []
-            self.calculateStats(for: habit)
+            calculateStats(for: habit)
             let history = try await fetchLogs(habitId: habitId)
             self.logs = history.sorted { $0.logDate < $1.logDate }
-            self.calculateStats(for: habit)
+            calculateStats(for: habit)
         } catch {
-            self.errorMessage = error.localizedDescription
+            errorMessage = error.localizedDescription
         }
     }
 
     private func fetchLogs(habitId: String) async throws -> [HabitLog] {
+        if session.mode == .guest {
+            return try await localStore.habit(for: habitId)?.recentLogs ?? []
+        }
         let startDate = Calendar.current.date(byAdding: .month, value: -12, to: Date())
         return try await apiClient.getHabitLogs(habitId: habitId, startDate: startDate, endDate: nil)
     }
 
     private func calculateStats(for habit: Habit) {
         let today = DateFormatter.hiveDayFormatter.string(from: Date())
-        print("🔍 Detail view calculateStats - today: \(today), logs: \(logs.map { $0.logDate })")
         if let todayLog = logs.first(where: { $0.logDate == today }) {
             todayValue = todayLog.value
             let threshold = habit.type == .counter ? habit.targetPerDay : 1
             isCompletedToday = todayLog.value >= max(threshold, 1)
-            print("🔍 Detail view - found today's log, isCompleted: \(isCompletedToday)")
         } else {
             todayValue = 0
             isCompletedToday = false
-            print("🔍 Detail view - no log found for today, isCompleted: false")
         }
-
         totalDays = Set(logs.map { $0.logDate }).count
     }
 
     func toggleDateLog(date: Date, habit: Habit) {
         let dateString = DateFormatter.hiveDayFormatter.string(from: date)
 
+        if session.mode == .guest {
+            guestToggle(date: date, dateString: dateString, habit: habit)
+            return
+        }
+
         if let existingIndex = logs.firstIndex(where: { $0.logDate == dateString }) {
-            // Delete existing log
             let removedLog = logs.remove(at: existingIndex)
             calculateStats(for: habit)
-
             let logDate = DateFormatter.hiveDayFormatter.date(from: removedLog.logDate)
-            Task {
-                do {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
 #if canImport(UIKit)
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
 #endif
-                    try await apiClient.deleteHabitLog(habitId: habit.id, logDate: logDate)
-                    await loadHabitDetailsAsync(habitId: habit.id)
+                do {
+                    try await self.apiClient.deleteHabitLog(habitId: habit.id, logDate: logDate)
+                    await self.loadHabitDetailsAsync(habitId: habit.id)
                 } catch {
-                    await MainActor.run { self.errorMessage = error.localizedDescription }
+                    self.errorMessage = error.localizedDescription
                 }
             }
         } else {
-            // Create new log
             let value = habit.type == .counter ? habit.targetPerDay : 1
             let provisionalLog = HabitLog(
                 id: UUID().uuidString,
@@ -607,16 +628,69 @@ class HabitDetailViewModel: ObservableObject {
             )
             logs.append(provisionalLog)
             calculateStats(for: habit)
-
-            Task {
-                do {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
 #if canImport(UIKit)
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
 #endif
-                    try await apiClient.logHabit(habitId: habit.id, value: value, on: date)
-                    await loadHabitDetailsAsync(habitId: habit.id)
+                do {
+                    try await self.apiClient.logHabit(habitId: habit.id, value: value, on: date)
+                    await self.loadHabitDetailsAsync(habitId: habit.id)
                 } catch {
-                    await MainActor.run { self.errorMessage = error.localizedDescription }
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func guestToggle(date: Date, dateString: String, habit: Habit) {
+        if let existingIndex = logs.firstIndex(where: { $0.logDate == dateString }) {
+            _ = logs.remove(at: existingIndex)
+            calculateStats(for: habit)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+#if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+#endif
+                do {
+                    try await self.localStore.deleteHabitLog(habitId: habit.id, logDate: dateString)
+                    if let updated = try await self.localStore.habit(for: habit.id) {
+                        self.habit = updated
+                        self.logs = updated.recentLogs ?? []
+                        self.calculateStats(for: updated)
+                    }
+                } catch {
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        } else {
+            let value = habit.type == .counter ? habit.targetPerDay : 1
+            let provisionalLog = HabitLog(
+                id: UUID().uuidString,
+                habitId: habit.id,
+                userId: habit.userId,
+                logDate: dateString,
+                value: value,
+                source: "manual",
+                createdAt: Date()
+            )
+            logs.append(provisionalLog)
+            logs.sort { $0.logDate < $1.logDate }
+            calculateStats(for: habit)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+#if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+#endif
+                do {
+                    _ = try await self.localStore.logHabit(habitId: habit.id, value: value, on: date)
+                    if let updated = try await self.localStore.habit(for: habit.id) {
+                        self.habit = updated
+                        self.logs = updated.recentLogs ?? []
+                        self.calculateStats(for: updated)
+                    }
+                } catch {
+                    self.errorMessage = error.localizedDescription
                 }
             }
         }
@@ -626,73 +700,38 @@ class HabitDetailViewModel: ObservableObject {
         toggleDateLog(date: Date(), habit: habit)
     }
 
-    func toggleTodayOld(for habit: Habit) {
-        let todayString = DateFormatter.hiveDayFormatter.string(from: Date())
-
-        if let existingIndex = logs.firstIndex(where: { $0.logDate == todayString }) {
-            let removedLog = logs.remove(at: existingIndex)
-            calculateStats(for: habit)
-
-            let logDate = DateFormatter.hiveDayFormatter.date(from: removedLog.logDate)
-            Task {
-                do {
-#if canImport(UIKit)
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-#endif
-                    try await apiClient.deleteHabitLog(habitId: habit.id, logDate: logDate)
-                    await loadHabitDetailsAsync(habitId: habit.id)
-                } catch {
-                    await MainActor.run { self.errorMessage = error.localizedDescription }
-                }
-            }
-        } else {
-            let value = habit.type == .counter ? habit.targetPerDay : 1
-            let provisionalLog = HabitLog(
-                id: UUID().uuidString,
-                habitId: habit.id,
-                userId: habit.userId,
-                logDate: todayString,
-                value: value,
-                source: "manual",
-                createdAt: Date()
-            )
-            logs.append(provisionalLog)
-            logs.sort { $0.logDate < $1.logDate }
-            calculateStats(for: habit)
-
-            Task {
-                do {
-#if canImport(UIKit)
-                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-#endif
-                    _ = try await apiClient.logHabit(habitId: habit.id, value: value)
-                    await loadHabitDetailsAsync(habitId: habit.id)
-                } catch {
-                    await MainActor.run { self.errorMessage = error.localizedDescription }
-                }
-            }
-        }
-    }
-
     func incrementCounter(for habit: Habit) {
         guard habit.type == .counter else { return }
         let newValue = min(todayValue + 1, habit.targetPerDay)
-
 #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
 #endif
-
-        // Optimistic update
         todayValue = newValue
         calculateStats(for: habit)
 
-        // API call
-        Task {
-            do {
-                _ = try await apiClient.logHabit(habitId: habit.id, value: newValue)
-                await loadHabitDetailsAsync(habitId: habit.id)
-            } catch {
-                await MainActor.run { self.errorMessage = error.localizedDescription }
+        if session.mode == .guest {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    _ = try await self.localStore.logHabit(habitId: habit.id, value: newValue)
+                    if let updated = try await self.localStore.habit(for: habit.id) {
+                        self.habit = updated
+                        self.logs = updated.recentLogs ?? []
+                        self.calculateStats(for: updated)
+                    }
+                } catch {
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        } else {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    _ = try await self.apiClient.logHabit(habitId: habit.id, value: newValue)
+                    await self.loadHabitDetailsAsync(habitId: habit.id)
+                } catch {
+                    self.errorMessage = error.localizedDescription
+                }
             }
         }
     }
@@ -700,56 +739,83 @@ class HabitDetailViewModel: ObservableObject {
     func decrementCounter(for habit: Habit) {
         guard habit.type == .counter else { return }
         guard todayValue > 0 else { return }
-
 #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
 #endif
-
         let newValue = todayValue - 1
-
-        // Optimistic update
         todayValue = newValue
         calculateStats(for: habit)
 
-        if newValue == 0 {
-            // Delete the log
-            Task {
+        if session.mode == .guest {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
                 do {
-                    try await apiClient.deleteHabitLog(habitId: habit.id, logDate: nil)
-                    await loadHabitDetailsAsync(habitId: habit.id)
+                    if newValue == 0 {
+                        let todayString = DateFormatter.hiveDayFormatter.string(from: Date())
+                        try await self.localStore.deleteHabitLog(habitId: habit.id, logDate: todayString)
+                    } else {
+                        _ = try await self.localStore.logHabit(habitId: habit.id, value: newValue)
+                    }
+                    if let updated = try await self.localStore.habit(for: habit.id) {
+                        self.habit = updated
+                        self.logs = updated.recentLogs ?? []
+                        self.calculateStats(for: updated)
+                    }
                 } catch {
-                    await MainActor.run { self.errorMessage = error.localizedDescription }
+                    self.errorMessage = error.localizedDescription
                 }
             }
         } else {
-            // Update with new value
-            Task {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
                 do {
-                    _ = try await apiClient.logHabit(habitId: habit.id, value: newValue)
-                    await loadHabitDetailsAsync(habitId: habit.id)
+                    if newValue == 0 {
+                        try await self.apiClient.deleteHabitLog(habitId: habit.id, logDate: nil)
+                    } else {
+                        _ = try await self.apiClient.logHabit(habitId: habit.id, value: newValue)
+                    }
+                    await self.loadHabitDetailsAsync(habitId: habit.id)
                 } catch {
-                    await MainActor.run { self.errorMessage = error.localizedDescription }
+                    self.errorMessage = error.localizedDescription
                 }
             }
         }
     }
 
     func deleteHabit(habitId: String, completion: @escaping () -> Void) {
-        Task {
-            do {
-                try await apiClient.deleteHabit(habitId: habitId)
-                // Notify parent view to refresh
-                await MainActor.run {
+        if session.mode == .guest {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.localStore.deleteHabit(id: habitId)
                     NotificationCenter.default.post(name: .habitDeleted, object: habitId)
                     completion()
+                } catch {
+                    self.errorMessage = error.localizedDescription
                 }
+            }
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.apiClient.deleteHabit(habitId: habitId)
+                NotificationCenter.default.post(name: .habitDeleted, object: habitId)
+                completion()
             } catch {
-                await MainActor.run { self.errorMessage = error.localizedDescription }
+                self.errorMessage = error.localizedDescription
             }
         }
     }
 
     func convertToHive(habitId: String, completion: @escaping (Bool, String) -> Void) {
+        if session.mode == .guest {
+            completion(false, "Sign in to create a Hive with friends.")
+            session.requestAuthentication()
+            return
+        }
+
         Task {
             await MainActor.run {
                 isConvertingToHive = true
@@ -757,17 +823,16 @@ class HabitDetailViewModel: ObservableObject {
 
             do {
                 let hive = try await apiClient.createHiveFromHabit(habitId: habitId, name: nil, backfillDays: 30)
-                print("Created hive: \(hive.id)")
                 await MainActor.run {
-                    isConvertingToHive = false
                     NotificationCenter.default.post(name: .hiveCreated, object: hive.id)
-                    completion(true, "Hive created successfully! 🎉")
+                    completion(true, hive.id)
+                    isConvertingToHive = false
                 }
             } catch {
                 await MainActor.run {
-                    isConvertingToHive = false
                     self.errorMessage = error.localizedDescription
-                    completion(false, "Failed to create hive: \(error.localizedDescription)")
+                    completion(false, error.localizedDescription)
+                    self.isConvertingToHive = false
                 }
             }
         }

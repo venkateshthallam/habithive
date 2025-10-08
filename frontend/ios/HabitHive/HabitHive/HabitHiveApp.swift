@@ -11,6 +11,7 @@ import UserNotifications
 @main
 struct HabitHiveApp: App {
     @StateObject private var apiClient = FastAPIClient.shared
+    @StateObject private var session = AppSessionController.shared
     @StateObject private var notificationManager = NotificationManager.shared
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var showSplash = true
@@ -31,17 +32,7 @@ struct HabitHiveApp: App {
         WindowGroup {
             ZStack {
                 Group {
-                    if apiClient.isAuthenticated {
-                        if !apiClient.hasLoadedProfile {
-                            SplashScreenView()
-                        } else if apiClient.requiresProfileSetup {
-                            ProfileSetupFlowView()
-                        } else {
-                            MainTabView()
-                        }
-                    } else {
-                        WelcomeView()
-                    }
+                    contentView
                 }
                 .task(id: apiClient.isAuthenticated) {
                     await apiClient.bootstrapIfNeeded()
@@ -79,6 +70,25 @@ struct HabitHiveApp: App {
 
                 // Clear badges whenever the app re-enters the foreground
                 notificationManager.clearAllNotifications()
+            }
+            .environmentObject(session)
+        }
+    }
+
+    @ViewBuilder
+    private var contentView: some View {
+        switch session.mode {
+        case .welcome:
+            WelcomeView()
+        case .guest:
+            MainTabView()
+        case .authenticatedNeedsProfile:
+            ProfileSetupFlowView()
+        case .authenticated:
+            if !apiClient.hasLoadedProfile {
+                SplashScreenView()
+            } else {
+                MainTabView()
             }
         }
     }

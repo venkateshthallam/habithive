@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CreateHabitView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var session: AppSessionController
     @StateObject private var viewModel = CreateHabitViewModel()
     @StateObject private var themeManager = ThemeManager.shared
     
@@ -254,45 +255,80 @@ struct CreateHabitView: View {
                     .foregroundColor(HiveColors.slateText)
             }
             
-            Toggle("Enable Reminder", isOn: $viewModel.reminderEnabled)
+            Toggle("Enable Reminder", isOn: reminderToggleBinding)
                 .font(HiveTypography.body)
                 .foregroundColor(HiveColors.slateText)
+
+            if viewModel.errorMessage == CreateHabitViewModel.guestReminderMessage {
+                Text(viewModel.errorMessage)
+                    .font(HiveTypography.caption)
+                    .foregroundColor(.red)
+                    .transition(.opacity)
+            }
         }
     }
     
-    private var createButton: some View {
-        Button(action: {
-            viewModel.createHabit { habit in
-                onComplete(habit)
-                dismiss()
-            }
-        }) {
-            HStack {
-                if viewModel.isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(0.8)
+    private var reminderToggleBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.reminderEnabled },
+            set: { isOn in
+                if isOn && session.mode == .guest {
+                    viewModel.reminderEnabled = false
+                    viewModel.errorMessage = CreateHabitViewModel.guestReminderMessage
+                    session.requestAuthentication()
                 } else {
-                    Text("Create Habit")
-                    Image(systemName: "plus.circle.fill")
+                    viewModel.reminderEnabled = isOn
+                    if viewModel.errorMessage == CreateHabitViewModel.guestReminderMessage {
+                        viewModel.errorMessage = ""
+                    }
                 }
             }
-            .font(HiveTypography.headline)
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, HiveSpacing.md)
-            .background(
-                themeManager.currentTheme.primaryGradient
-                    .opacity(viewModel.canCreate ? 1 : 0.5)
-            )
-            .cornerRadius(HiveRadius.large)
+        )
+    }
+    
+    private var createButton: some View {
+        VStack(alignment: .center, spacing: HiveSpacing.sm) {
+            if !viewModel.errorMessage.isEmpty && viewModel.errorMessage != CreateHabitViewModel.guestReminderMessage {
+                Text(viewModel.errorMessage)
+                    .font(HiveTypography.caption)
+                    .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+
+            Button(action: {
+                viewModel.createHabit { habit in
+                    onComplete(habit)
+                    dismiss()
+                }
+            }) {
+                HStack {
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Text("Create Habit")
+                        Image(systemName: "plus.circle.fill")
+                    }
+                }
+                .font(HiveTypography.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, HiveSpacing.md)
+                .background(
+                    themeManager.currentTheme.primaryGradient
+                        .opacity(viewModel.canCreate ? 1 : 0.5)
+                )
+                .cornerRadius(HiveRadius.large)
+            }
+            .disabled(!viewModel.canCreate || viewModel.isLoading)
         }
-        .disabled(!viewModel.canCreate || viewModel.isLoading)
-        
     }
 }
 
 // MARK: - View Model
+@MainActor
 class CreateHabitViewModel: ObservableObject {
     @Published var name = ""
     @Published var emoji = "🎯"
@@ -305,8 +341,12 @@ class CreateHabitViewModel: ObservableObject {
     @Published var reminderTime = Date()
     @Published var isLoading = false
     @Published var errorMessage = ""
+
+    static let guestReminderMessage = "Sign in to enable reminders and push notifications."
     
     private let apiClient = FastAPIClient.shared
+    private let localStore = LocalHabitStore.shared
+    private let session = AppSessionController.shared
     
     init() {
         // Initialize with default values
@@ -319,6 +359,13 @@ class CreateHabitViewModel: ObservableObject {
     }
     
     func createHabit(completion: @escaping (Habit) -> Void) {
+        if reminderEnabled && session.mode == .guest {
+            reminderEnabled = false
+            errorMessage = Self.guestReminderMessage
+            session.requestAuthentication()
+            return
+        }
+
         isLoading = true
         errorMessage = ""
         
@@ -356,18 +403,19 @@ class CreateHabitViewModel: ObservableObject {
         
         print("📝 Creating habit: \(name) with emoji: \(emoji) and color: \(colorHex)")
         
-        Task {
+        Task { @MainActor in
             do {
-                let habit = try await apiClient.createHabit(request)
-                await MainActor.run {
-                    self.isLoading = false
-                    completion(habit)
+                let habit: Habit
+                if session.mode == .guest {
+                    habit = try await localStore.createHabit(from: request)
+                } else {
+                    habit = try await apiClient.createHabit(request)
                 }
+                self.isLoading = false
+                completion(habit)
             } catch {
-                await MainActor.run {
-                    self.isLoading = false
-                    self.errorMessage = error.localizedDescription
-                }
+                self.isLoading = false
+                self.errorMessage = error.localizedDescription
             }
         }
     }
@@ -391,4 +439,5 @@ extension Color {
 
 #Preview {
     CreateHabitView { _ in }
+        .environmentObject(AppSessionController.shared)
 }

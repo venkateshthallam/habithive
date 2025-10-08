@@ -19,6 +19,7 @@ struct ProfileSetupFlowView: View {
     @StateObject private var themeManager = ThemeManager.shared
     @ObservedObject private var apiClient = FastAPIClient.shared
     @State private var step: Step = .name
+    @State private var completedSteps: Set<Step> = []
     @State private var displayName: String
     @State private var phoneNumber: String
     @State private var isSubmitting = false
@@ -34,9 +35,18 @@ struct ProfileSetupFlowView: View {
         _displayName = State(initialValue: currentUser?.displayName ?? "")
         _phoneNumber = State(initialValue: currentUser?.phone ?? "")
 
+        var initialCompleted: Set<Step> = []
+
         if let currentUser {
             let needsName = currentUser.displayName.isDefaultHiveDisplayName
             let needsPhone = currentUser.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+            if !needsName {
+                initialCompleted.insert(.name)
+            }
+            if !needsPhone {
+                initialCompleted.insert(.phone)
+            }
 
             if needsName {
                 _step = State(initialValue: .name)
@@ -45,7 +55,11 @@ struct ProfileSetupFlowView: View {
             } else {
                 _step = State(initialValue: .notifications)
             }
+        } else {
+            _step = State(initialValue: .name)
         }
+
+        _completedSteps = State(initialValue: initialCompleted)
     }
 
     var body: some View {
@@ -140,7 +154,7 @@ struct ProfileSetupFlowView: View {
     }
 
     private func handlePrimaryAction() {
-        Task {
+        Task { @MainActor in
             do {
                 errorMessage = nil
                 isSubmitting = true
@@ -153,6 +167,7 @@ struct ProfileSetupFlowView: View {
                         return
                     }
                     _ = try await FastAPIClient.shared.updateProfile(ProfileUpdate(displayName: trimmed))
+                    completedSteps.insert(.name)
                     step = .phone
                 case .phone:
                     let normalized = normalizePhone(phoneNumber)
@@ -162,16 +177,19 @@ struct ProfileSetupFlowView: View {
                         return
                     }
                     try await FastAPIClient.shared.updatePhoneNumber(normalized)
+                    completedSteps.insert(.phone)
                     step = .notifications
                 case .notifications:
                     if !notificationsEnabled && !hasRequestedNotifications {
                         await requestNotifications()
                     }
+                    completedSteps.insert(.notifications)
                     step = .contacts
                 case .contacts:
                     if !contactsUploaded && !hasRequestedContacts {
                         await requestContactsAndUpload()
                     }
+                    completedSteps.insert(.contacts)
                     FastAPIClient.shared.markProfileSetupComplete()
                 }
             } catch {
@@ -243,14 +261,23 @@ struct ProfileSetupFlowView: View {
             phoneNumber = user.phone
         }
 
-        if !hasAutoCompleted {
-            let needsName = user.displayName.isDefaultHiveDisplayName
-            let needsPhone = user.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let needsName = user.displayName.isDefaultHiveDisplayName
+        let needsPhone = user.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
-            if needsName {
+        if !needsName {
+            completedSteps.insert(.name)
+        }
+        if !needsPhone {
+            completedSteps.insert(.phone)
+        }
+
+        if !hasAutoCompleted {
+            if needsName && !completedSteps.contains(.name) {
                 step = .name
-            } else if needsPhone {
+            } else if needsPhone && !completedSteps.contains(.phone) {
                 step = .phone
+            } else if step.rawValue < Step.notifications.rawValue {
+                step = .notifications
             }
         }
     }
@@ -261,6 +288,13 @@ struct ProfileSetupFlowView: View {
 
         let hasName = !user.displayName.isDefaultHiveDisplayName
         let hasPhone = !user.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        if hasName {
+            completedSteps.insert(.name)
+        }
+        if hasPhone {
+            completedSteps.insert(.phone)
+        }
 
         if hasName && hasPhone {
             hasAutoCompleted = true

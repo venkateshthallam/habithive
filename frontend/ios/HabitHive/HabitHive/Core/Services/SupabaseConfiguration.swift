@@ -23,7 +23,7 @@ enum SupabaseConfiguration {
 
     // MARK: - API Environment Configuration
     // 🔧 CHANGE THIS TO SWITCH ENVIRONMENTS 🔧
-    private static let useProduction = true  // Set to true for production, false for local testing
+    private static let useProduction = false  // Set to true for production, false for local testing
 
     private static let productionURL = "https://habithive-production.up.railway.app"
     private static let localURL = "http://192.168.4.121:8002"  // Update this with your local IP
