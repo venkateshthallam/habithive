@@ -742,11 +742,15 @@ final class FastAPIClient: ObservableObject {
 
     func joinHive(code: String) async throws -> HiveJoinResult {
         guard isAuthenticated else { throw FastAPIError.unauthorized }
-        let request = JoinHivePayload(code: code)
+
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitized = trimmed.filter { $0.isLetter || $0.isNumber }
+        let payloadCode = sanitized.isEmpty ? trimmed.lowercased() : sanitized.lowercased()
+
         let response: JoinHiveResponse = try await performRequest(
             path: "/api/hives/join",
             method: .post,
-            body: request,
+            body: JoinHivePayload(code: payloadCode),
             requiresAuth: true
         )
 

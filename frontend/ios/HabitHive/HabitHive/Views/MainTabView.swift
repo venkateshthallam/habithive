@@ -680,9 +680,11 @@ class HivesViewModel: ObservableObject {
             return
         }
 
-        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let alphanumeric = trimmed.filter { $0.isLetter || $0.isNumber }
+        let cleaned = (alphanumeric.isEmpty ? trimmed : alphanumeric).lowercased()
 
-        guard !normalized.isEmpty else {
+        guard !cleaned.isEmpty else {
             joinStatus = .failure(message: "Enter an invite code to continue.")
             return
         }
@@ -690,7 +692,7 @@ class HivesViewModel: ObservableObject {
         joinStatus = .joining
 
         do {
-            let result = try await apiClient.joinHive(code: normalized)
+            let result = try await apiClient.joinHive(code: cleaned)
             await loadHivesAsync(force: true)
             let message = result.message ?? "You're in the hive!"
             joinStatus = .success(message: message)
@@ -2641,8 +2643,8 @@ struct JoinHiveSheet: View {
                     .font(HiveTypography.caption)
                     .foregroundColor(themeManager.currentTheme.secondaryTextColor)
 
-                TextField("ABC123", text: $inviteCode)
-                    .textInputAutocapitalization(.characters)
+                TextField("abc123", text: $inviteCode)
+                    .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
                     .font(HiveTypography.headline)
                     .foregroundColor(themeManager.currentTheme.primaryTextColor)
@@ -2657,9 +2659,11 @@ struct JoinHiveSheet: View {
                     )
                     .focused($isFocused)
                     .onChange(of: inviteCode) { newValue in
-                        let filtered = newValue.uppercased().filter { $0.isLetter || $0.isNumber }
-                        if filtered != inviteCode {
-                            inviteCode = filtered
+                        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let lettersAndNumbers = trimmed.filter { $0.isLetter || $0.isNumber }
+                        let cleaned = (lettersAndNumbers.isEmpty ? trimmed : lettersAndNumbers).lowercased()
+                        if cleaned != inviteCode {
+                            inviteCode = cleaned
                         }
                     }
             }

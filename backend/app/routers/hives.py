@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query, Response
 from app.models.schemas import (
     Hive, HiveCreate, HiveUpdate, HiveFromHabit,
     HiveMember, HiveMemberDay, LogHiveRequest,
-    HiveInvite, HiveInviteCreate, JoinHiveRequest,
+    JoinHiveRequest,
     HiveDetail, HiveMemberStatus, HiveTodaySummary,
     HiveOverviewResponse, HiveLeaderboardEntry, HiveHeatmapDay,
 )
@@ -20,7 +20,6 @@ router = APIRouter()
 test_hives = {}
 test_hive_members = {}
 test_hive_member_days = {}
-test_hive_invites = {}
 
 # Import shared test data (if needed)
 def get_test_profiles():
@@ -719,10 +718,6 @@ async def delete_hive(
         for key in to_delete_days:
             test_hive_member_days.pop(key, None)
 
-        to_delete_invites = [key for key, invite in test_hive_invites.items() if invite["hive_id"] == hive_id]
-        for key in to_delete_invites:
-            test_hive_invites.pop(key, None)
-
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     try:
@@ -853,65 +848,51 @@ async def create_hive_from_habit(
             detail=f"Failed to create hive from habit: {str(e)}"
         )
 
-@router.post("/{hive_id}/invite", response_model=HiveInvite)
-async def create_hive_invite(
+@router.post("/{hive_id}/invite", response_model=dict)
+async def regenerate_invite_code(
     hive_id: str,
-    invite: HiveInviteCreate,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    """Create an invite code for a hive"""
+    """Regenerate invite code for a hive (owner only)"""
     user_id = current_user["id"]
-    
+
     if settings.TEST_MODE:
         if hive_id not in test_hives:
             raise HTTPException(status_code=404, detail="Hive not found")
-        
+
         hive = test_hives[hive_id]
         if hive["owner_id"] != user_id:
-            raise HTTPException(status_code=403, detail="Only owner can create invites")
-        
-        invite_id = str(uuid.uuid4())
-        code = generate_invite_code()
-        
-        new_invite = {
-            "id": invite_id,
-            "hive_id": hive_id,
-            "code": code,
-            "created_by": user_id,
-            "expires_at": datetime.utcnow() + timedelta(minutes=invite.ttl_minutes),
-            "max_uses": invite.max_uses,
-            "use_count": 0,
-            "created_at": datetime.utcnow()
-        }
-        test_hive_invites[code] = new_invite
-        if hive_id in test_hives:
-            test_hives[hive_id]["invite_code"] = code
+            raise HTTPException(status_code=403, detail="Only owner can regenerate invite code")
 
-        return HiveInvite(**new_invite)
-    
+        code = generate_invite_code()
+        test_hives[hive_id]["invite_code"] = code
+
+        return {"invite_code": code}
+
     try:
         supabase = get_user_supabase_client(current_user)
 
-        # Call create_hive_invite RPC
-        response = supabase.rpc("create_hive_invite", {
-            "p_hive_id": hive_id,
-            "p_ttl_minutes": invite.ttl_minutes,
-            "p_max_uses": invite.max_uses
-        }).execute()
+        # Check if user is owner
+        hive_response = supabase.table("hives").select("owner_id").eq("id", hive_id).single().execute()
+        if not hive_response.data or hive_response.data["owner_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Only owner can regenerate invite code")
 
-        invite_row = response.data
+        # Generate new invite code
+        new_code = secrets.token_hex(6)
 
-        # Also update the hive's default invite code for quick sharing
+        # Update hive with new invite code
         supabase.table("hives").update({
-            "invite_code": invite_row["code"],
+            "invite_code": new_code,
             "updated_at": datetime.utcnow().isoformat()
         }).eq("id", hive_id).execute()
 
-        return HiveInvite(**invite_row)
+        return {"invite_code": new_code}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create invite: {str(e)}"
+            detail=f"Failed to regenerate invite code: {str(e)}"
         )
 
 @router.post("/join", response_model=dict)
@@ -921,57 +902,51 @@ async def join_hive(
 ):
     """Join a hive using an invite code"""
     user_id = current_user["id"]
-    
+
     if settings.TEST_MODE:
-        if request.code not in test_hive_invites:
+        # Find hive by invite code
+        hive_id = None
+        for hid, hive in test_hives.items():
+            if hive.get("invite_code") == request.code:
+                hive_id = hid
+                break
+
+        if not hive_id:
             raise HTTPException(status_code=400, detail="Invalid invite code")
-        
-        invite = test_hive_invites[request.code]
-        
-        # Check expiry
-        if invite["expires_at"] < datetime.utcnow():
-            raise HTTPException(status_code=400, detail="Invite has expired")
-        
-        # Check uses
-        if invite["use_count"] >= invite["max_uses"]:
-            raise HTTPException(status_code=400, detail="Invite has been used too many times")
-        
-        hive_id = invite["hive_id"]
-        
+
         # Check if already a member
-        is_member = any(m["hive_id"] == hive_id and m["user_id"] == user_id 
+        is_member = any(m["hive_id"] == hive_id and m["user_id"] == user_id
                        for m in test_hive_members.values())
         if is_member:
             return {"success": True, "hive_id": hive_id, "message": "Already a member"}
-        
+
         # Check member count
-        member_count = len([m for m in test_hive_members.values() 
-                          if m["hive_id"] == hive_id])
-        if member_count >= 10:
-            raise HTTPException(status_code=400, detail="Hive is full (max 10 members)")
-        
+        member_count = len([m for m in test_hive_members.values()
+                          if m["hive_id"] == hive_id and m.get("is_active", True)])
+        max_members = test_hives[hive_id].get("max_members", 10)
+        if member_count >= max_members:
+            raise HTTPException(status_code=400, detail=f"Hive is full (max {max_members} members)")
+
         # Add as member
         member_id = str(uuid.uuid4())
         test_hive_members[member_id] = {
             "hive_id": hive_id,
             "user_id": user_id,
             "role": "member",
-            "joined_at": datetime.utcnow()
+            "joined_at": datetime.utcnow(),
+            "is_active": True
         }
-        
-        # Increment use count
-        invite["use_count"] += 1
-        
+
         return {"success": True, "hive_id": hive_id, "message": "Successfully joined hive"}
-    
+
     try:
         supabase = get_user_supabase_client(current_user)
-        
+
         # Call join_hive_with_code RPC
         response = supabase.rpc("join_hive_with_code", {
             "p_code": request.code
         }).execute()
-        
+
         return {"success": True, "hive_id": response.data, "message": "Successfully joined hive"}
     except Exception as e:
         raise HTTPException(

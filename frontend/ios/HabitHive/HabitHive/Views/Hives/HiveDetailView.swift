@@ -94,7 +94,7 @@ struct HiveDetailView: View {
             Text("You will no longer be a member of this hive.")
         }
         .onReceive(viewModel.$latestInviteCode.compactMap { $0 }) { code in
-            shareContent = ShareContent(text: "Join my HabitHive group! Use code: \(code)")
+            shareContent = ShareContent(text: "Join my HabitHive group! Use code: \(code.lowercased())")
         }
         .onReceive(viewModel.$logConfirmationMessage.compactMap { $0 }) { message in
             logConfirmation = message
@@ -182,13 +182,13 @@ struct HiveDetailView: View {
                 Button {
 #if canImport(UIKit)
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    UIPasteboard.general.string = inviteCode
+                    UIPasteboard.general.string = inviteCode.lowercased()
 #endif
-                    shareContent = ShareContent(text: "Join my HabitHive group! Use code: \(inviteCode)")
+                    shareContent = ShareContent(text: "Join my HabitHive group! Use code: \(inviteCode.lowercased())")
                 } label: {
                     HStack(spacing: HiveSpacing.xs) {
                         Image(systemName: "link")
-                        Text("Copy invite code • \(inviteCode.uppercased())")
+                        Text("Copy invite code • \(inviteCode.lowercased())")
                     }
                     .font(HiveTypography.caption)
                     .foregroundColor(.white)
@@ -768,7 +768,7 @@ class HiveDetailViewModel: ObservableObject {
 #if canImport(UIKit)
                 UIPasteboard.general.string = invite.code
 #endif
-                await MainActor.run { self.latestInviteCode = invite.code }
+                await MainActor.run { self.latestInviteCode = invite.code.lowercased() }
             } catch {
                 await MainActor.run { self.errorMessage = error.localizedDescription }
             }
