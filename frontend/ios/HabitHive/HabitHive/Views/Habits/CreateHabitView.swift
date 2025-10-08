@@ -11,8 +11,9 @@ struct CreateHabitView: View {
     @State private var selectedEmoji = "🎯"
     @State private var selectedColor = HiveColors.habitColors[0]
     @State private var showEmojiPicker = false
+    @State private var showTemplateSelection = false
     @FocusState private var isNameFieldFocused: Bool
-    
+
     init(onComplete: @escaping (Habit) -> Void) {
         self.onComplete = onComplete
     }
@@ -27,9 +28,12 @@ struct CreateHabitView: View {
                 
                 ScrollView {
                     VStack(spacing: HiveSpacing.lg) {
+                        // Template Selection Button
+                        templateSelectionButton
+
                         // Emoji & Color Selection
                         emojiColorSection
-                        
+
                         // Name Input
                         nameSection
                         
@@ -63,10 +67,52 @@ struct CreateHabitView: View {
                     isNameFieldFocused = true
                 }
             }
+            .sheet(isPresented: $showTemplateSelection) {
+                HabitTemplateSelectionView(
+                    onComplete: { templates in
+                        if let template = templates.first {
+                            fillFromTemplate(template)
+                        }
+                        showTemplateSelection = false
+                    },
+                    onSkip: {
+                        showTemplateSelection = false
+                    },
+                    singleSelection: true
+                )
+            }
         }
     }
-    
+
     // MARK: - Sections
+
+    private var templateSelectionButton: some View {
+        Button(action: {
+            showTemplateSelection = true
+        }) {
+            HStack {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16))
+                Text("Choose from Templates")
+                    .font(HiveTypography.body)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+            }
+            .foregroundColor(themeManager.currentTheme.primaryTextColor)
+            .padding(HiveSpacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: HiveRadius.large)
+                    .fill(themeManager.currentTheme.cardBackgroundColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: HiveRadius.large)
+                            .stroke(HiveColors.honeyGradientEnd.opacity(0.3), lineWidth: 1)
+                    )
+            )
+            .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
     
     private var emojiColorSection: some View {
         VStack(spacing: HiveSpacing.md) {
@@ -324,6 +370,21 @@ struct CreateHabitView: View {
             }
             .disabled(!viewModel.canCreate || viewModel.isLoading)
         }
+    }
+
+    // MARK: - Helper Functions
+
+    private func fillFromTemplate(_ template: HabitTemplate) {
+        viewModel.name = template.name
+        viewModel.emoji = template.emoji
+        selectedEmoji = template.emoji
+        viewModel.colorHex = template.colorHex
+        selectedColor = template.color
+        // Pre-fill with sensible defaults for templates
+        viewModel.type = .checkbox
+        viewModel.targetPerDay = 1
+        viewModel.scheduleDaily = true
+        viewModel.scheduleWeekmask = 127
     }
 }
 

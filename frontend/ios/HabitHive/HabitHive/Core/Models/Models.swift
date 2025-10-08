@@ -37,6 +37,28 @@ struct AuthResponse: Codable {
     }
 }
 
+// MARK: - Habit Template
+struct HabitTemplate: Identifiable {
+    let id: String
+    let category: String
+    let name: String
+    let description: String
+    let emoji: String
+    let colorHex: String
+
+    var color: Color {
+        Color(hex: colorHex)
+    }
+}
+
+enum HabitTemplateCategory: String, CaseIterable {
+    case lovedOnes = "Loved Ones"
+    case morningRoutine = "Morning Routine"
+    case mustHaveHabits = "Must-Have Habits"
+    case personalGrowth = "Personal Growth"
+    case socialActivities = "Social Activities"
+}
+
 // MARK: - Habit
 enum HabitType: String, Codable, CaseIterable {
     case checkbox = "checkbox"

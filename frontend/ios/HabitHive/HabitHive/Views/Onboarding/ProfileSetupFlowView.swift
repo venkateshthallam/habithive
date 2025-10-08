@@ -4,7 +4,7 @@ import UserNotifications
 
 struct ProfileSetupFlowView: View {
     private enum Step: Int, CaseIterable {
-        case name, phone, notifications, contacts
+        case name, phone, notifications, contacts, habitTemplates
 
         var title: String {
             switch self {
@@ -12,6 +12,7 @@ struct ProfileSetupFlowView: View {
             case .phone: return "Your phone"
             case .notifications: return "Stay motivated"
             case .contacts: return "Find friends"
+            case .habitTemplates: return "Your first habits"
             }
         }
     }
@@ -29,6 +30,7 @@ struct ProfileSetupFlowView: View {
     @State private var notificationsEnabled = false
     @State private var hasRequestedNotifications = false
     @State private var hasAutoCompleted = false
+    @State private var showTemplateSelection = false
 
     init() {
         let currentUser = FastAPIClient.shared.currentUser
@@ -67,10 +69,14 @@ struct ProfileSetupFlowView: View {
             themeManager.currentTheme.backgroundColor
                 .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: HiveSpacing.xl) {
+            VStack(spacing: 0) {
                 header
+                    .padding(.horizontal, HiveSpacing.lg)
+                    .padding(.top, HiveSpacing.xl)
 
-                VStack(alignment: .leading, spacing: HiveSpacing.lg) {
+                Spacer()
+
+                VStack(spacing: HiveSpacing.lg) {
                     switch step {
                     case .name:
                         NameStepView(name: $displayName)
@@ -80,22 +86,44 @@ struct ProfileSetupFlowView: View {
                         NotificationsStepView(notificationsEnabled: $notificationsEnabled, onRequest: requestNotifications)
                     case .contacts:
                         ContactsStepView(contactsUploaded: $contactsUploaded, onImport: uploadContacts)
+                    case .habitTemplates:
+                        EmptyView() // Template selection is shown as full screen
                     }
                 }
+                .padding(.horizontal, HiveSpacing.lg)
 
                 Spacer()
 
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(HiveTypography.caption)
-                        .foregroundColor(HiveColors.error)
-                        .transition(.opacity)
-                }
+                VStack(spacing: HiveSpacing.md) {
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(HiveTypography.caption)
+                            .foregroundColor(HiveColors.error)
+                            .transition(.opacity)
+                    }
 
-                primaryButton
+                    primaryButton
+                }
+                .padding(.horizontal, HiveSpacing.lg)
+                .padding(.bottom, HiveSpacing.xl)
             }
-            .padding(.horizontal, HiveSpacing.lg)
-            .padding(.vertical, HiveSpacing.xl)
+        }
+        .fullScreenCover(isPresented: $showTemplateSelection) {
+            HabitTemplateSelectionView(
+                onComplete: { templates in
+                    Task {
+                        await createHabitsFromTemplates(templates)
+                        showTemplateSelection = false
+                        completedSteps.insert(.habitTemplates)
+                        FastAPIClient.shared.markProfileSetupComplete()
+                    }
+                },
+                onSkip: {
+                    showTemplateSelection = false
+                    completedSteps.insert(.habitTemplates)
+                    FastAPIClient.shared.markProfileSetupComplete()
+                }
+            )
         }
         .overlay(alignment: .topTrailing) {
             if isSubmitting {
@@ -139,7 +167,7 @@ struct ProfileSetupFlowView: View {
 
     private var primaryButton: some View {
         Button(action: handlePrimaryAction) {
-            Text(step == .contacts ? "Finish" : "Continue")
+            Text(buttonText)
                 .font(HiveTypography.headline)
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -151,6 +179,18 @@ struct ProfileSetupFlowView: View {
                 .shadow(color: HiveColors.honeyGradientEnd.opacity(0.25), radius: 16, x: 0, y: 8)
         }
         .disabled(isSubmitting)
+        .opacity(step == .habitTemplates ? 0 : 1)
+    }
+
+    private var buttonText: String {
+        switch step {
+        case .habitTemplates:
+            return "Continue"
+        case .contacts:
+            return "Continue"
+        default:
+            return "Continue"
+        }
     }
 
     private func handlePrimaryAction() {
@@ -180,17 +220,17 @@ struct ProfileSetupFlowView: View {
                     completedSteps.insert(.phone)
                     step = .notifications
                 case .notifications:
-                    if !notificationsEnabled && !hasRequestedNotifications {
-                        await requestNotifications()
-                    }
+                    // Notifications are auto-requested on appear, just move to next step
                     completedSteps.insert(.notifications)
                     step = .contacts
                 case .contacts:
-                    if !contactsUploaded && !hasRequestedContacts {
-                        await requestContactsAndUpload()
-                    }
+                    // Contacts are auto-requested on appear, move to habit templates
                     completedSteps.insert(.contacts)
-                    FastAPIClient.shared.markProfileSetupComplete()
+                    step = .habitTemplates
+                    showTemplateSelection = true
+                case .habitTemplates:
+                    // This is handled by the template selection view
+                    break
                 }
             } catch {
                 errorMessage = error.localizedDescription
@@ -250,6 +290,29 @@ struct ProfileSetupFlowView: View {
         return digits
     }
 
+    @MainActor
+    private func createHabitsFromTemplates(_ templates: [HabitTemplate]) async {
+        for template in templates {
+            let habitRequest = CreateHabitRequest(
+                name: template.name,
+                emoji: template.emoji,
+                colorHex: template.colorHex,
+                type: .checkbox,
+                targetPerDay: 1,
+                scheduleDaily: true,
+                scheduleWeekmask: 127, // All days of the week
+                reminderEnabled: false,
+                reminderTime: nil
+            )
+
+            do {
+                _ = try await FastAPIClient.shared.createHabit(habitRequest)
+            } catch {
+                print("Failed to create habit from template: \(template.name), error: \(error)")
+            }
+        }
+    }
+
     private func syncStateWithCurrentUser() {
         guard let user = apiClient.currentUser else { return }
 
@@ -296,10 +359,8 @@ struct ProfileSetupFlowView: View {
             completedSteps.insert(.phone)
         }
 
-        if hasName && hasPhone {
-            hasAutoCompleted = true
-            apiClient.markProfileSetupComplete()
-        }
+        // Don't auto-complete - let user go through all steps including notifications, contacts, and habit templates
+        // The onboarding will complete only when user explicitly goes through all steps
     }
 }
 
@@ -308,15 +369,17 @@ private struct NameStepView: View {
     @StateObject private var themeManager = ThemeManager.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+        VStack(spacing: HiveSpacing.md) {
             Text("What should we call you?")
                 .font(HiveTypography.body)
                 .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                .multilineTextAlignment(.center)
 
             TextField("Bee Wonder", text: $name)
                 .textInputAutocapitalization(.words)
                 .foregroundColor(.black)
                 .font(HiveTypography.body)
+                .multilineTextAlignment(.center)
                 .padding(HiveSpacing.md)
                 .background(
                     RoundedRectangle(cornerRadius: HiveRadius.large)
@@ -334,15 +397,17 @@ private struct PhoneStepView: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.sm) {
+        VStack(spacing: HiveSpacing.md) {
             Text("Add your phone number")
                 .font(HiveTypography.body)
                 .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                .multilineTextAlignment(.center)
             TextField("(555) 123-4567", text: $phoneNumber)
                 .keyboardType(.phonePad)
                 .focused($isFocused)
                 .foregroundColor(.black)
                 .font(HiveTypography.body)
+                .multilineTextAlignment(.center)
                 .padding(HiveSpacing.md)
                 .background(
                     RoundedRectangle(cornerRadius: HiveRadius.large)
@@ -359,42 +424,43 @@ private struct ContactsStepView: View {
     @Binding var contactsUploaded: Bool
     let onImport: () async -> Void
     @StateObject private var themeManager = ThemeManager.shared
-    @State private var isProcessing = false
+    @State private var hasRequestedAutomatically = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+        VStack(spacing: HiveSpacing.md) {
             Text("Upload contacts to find your hive")
                 .font(HiveTypography.body)
                 .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                .multilineTextAlignment(.center)
 
             VStack(spacing: HiveSpacing.md) {
-                Button {
-                    Task {
-                        isProcessing = true
-                        await onImport()
-                        isProcessing = false
-                    }
-                } label: {
-                    HStack(spacing: HiveSpacing.sm) {
-                        Image(systemName: "person.2.fill")
-                        Text(contactsUploaded ? "Contacts Added" : "Upload Contacts")
-                    }
-                    .font(HiveTypography.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, HiveSpacing.md)
-                    .background(
-                        RoundedRectangle(cornerRadius: HiveRadius.large)
-                            .fill(themeManager.currentTheme.primaryGradient)
-                            .opacity(contactsUploaded ? 0.6 : 1)
-                    )
-                    .shadow(color: HiveColors.honeyGradientEnd.opacity(0.22), radius: 14, x: 0, y: 8)
+                HStack(spacing: HiveSpacing.sm) {
+                    Image(systemName: "person.2.fill")
+                    Text(contactsUploaded ? "Contacts Added" : "Requesting Permissions...")
                 }
-                .disabled(isProcessing || contactsUploaded)
+                .font(HiveTypography.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, HiveSpacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: HiveRadius.large)
+                        .fill(themeManager.currentTheme.primaryGradient)
+                        .opacity(contactsUploaded ? 0.6 : 1)
+                )
+                .shadow(color: HiveColors.honeyGradientEnd.opacity(0.22), radius: 14, x: 0, y: 8)
 
                 Text("We'll only store salted hashes—never the raw numbers.")
                     .font(HiveTypography.caption)
                     .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .onAppear {
+            if !hasRequestedAutomatically && !contactsUploaded {
+                hasRequestedAutomatically = true
+                Task {
+                    await onImport()
+                }
             }
         }
     }
@@ -404,42 +470,43 @@ private struct NotificationsStepView: View {
     @Binding var notificationsEnabled: Bool
     let onRequest: () async -> Void
     @StateObject private var themeManager = ThemeManager.shared
-    @State private var isProcessing = false
+    @State private var hasRequestedAutomatically = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: HiveSpacing.md) {
+        VStack(spacing: HiveSpacing.md) {
             Text("Get reminders to stay on track")
                 .font(HiveTypography.body)
                 .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                .multilineTextAlignment(.center)
 
             VStack(spacing: HiveSpacing.md) {
-                Button {
-                    Task {
-                        isProcessing = true
-                        await onRequest()
-                        isProcessing = false
-                    }
-                } label: {
-                    HStack(spacing: HiveSpacing.sm) {
-                        Image(systemName: notificationsEnabled ? "bell.fill" : "bell")
-                        Text(notificationsEnabled ? "Notifications Enabled" : "Enable Notifications")
-                    }
-                    .font(HiveTypography.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, HiveSpacing.md)
-                    .background(
-                        RoundedRectangle(cornerRadius: HiveRadius.large)
-                            .fill(themeManager.currentTheme.primaryGradient)
-                            .opacity(notificationsEnabled ? 0.6 : 1)
-                    )
-                    .shadow(color: HiveColors.honeyGradientEnd.opacity(0.22), radius: 14, x: 0, y: 8)
+                HStack(spacing: HiveSpacing.sm) {
+                    Image(systemName: notificationsEnabled ? "bell.fill" : "bell")
+                    Text(notificationsEnabled ? "Notifications Enabled" : "Requesting Permissions...")
                 }
-                .disabled(isProcessing || notificationsEnabled)
+                .font(HiveTypography.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, HiveSpacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: HiveRadius.large)
+                        .fill(themeManager.currentTheme.primaryGradient)
+                        .opacity(notificationsEnabled ? 0.6 : 1)
+                )
+                .shadow(color: HiveColors.honeyGradientEnd.opacity(0.22), radius: 14, x: 0, y: 8)
 
                 Text("We'll send gentle reminders to help you stay consistent.")
                     .font(HiveTypography.caption)
                     .foregroundColor(themeManager.currentTheme.secondaryTextColor)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .onAppear {
+            if !hasRequestedAutomatically && !notificationsEnabled {
+                hasRequestedAutomatically = true
+                Task {
+                    await onRequest()
+                }
             }
         }
     }
