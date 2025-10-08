@@ -82,6 +82,18 @@ final class FastAPIClient: ObservableObject {
     private let refreshTokenStorageKey = "fastapi.refreshToken"
     private let phoneStorageKey = "fastapi.phone"
     private let onboardingCompleteKey = "fastapi.onboardingComplete"
+    private let userIdStorageKey = "fastapi.userId"
+
+    private var authenticatedUserId: String? {
+        didSet {
+            guard let id = authenticatedUserId, !id.isEmpty else {
+                UserDefaults.standard.removeObject(forKey: userIdStorageKey)
+                return
+            }
+            UserDefaults.standard.set(id, forKey: userIdStorageKey)
+            migrateLegacyOnboardingFlagIfNeeded(for: id)
+        }
+    }
 
     private var accessTokenExpiry: Date?
     private var refreshTimer: Timer?
@@ -133,6 +145,8 @@ final class FastAPIClient: ObservableObject {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date format: \(string)")
         }
         encoder.dateEncodingStrategy = .iso8601
+
+        authenticatedUserId = UserDefaults.standard.string(forKey: userIdStorageKey)
 
         // Load saved tokens and attempt to restore session
         if let saved = UserDefaults.standard.string(forKey: sessionStorageKey) {
@@ -247,7 +261,6 @@ final class FastAPIClient: ObservableObject {
         )
 
         applyAuthResponse(response)
-        clearOnboardingCompletion()
         savePhone(response.phone)
         hasLoadedProfile = false
         await loadCurrentUser(force: true)
@@ -262,7 +275,6 @@ final class FastAPIClient: ObservableObject {
         )
 
         applyAuthResponse(response)
-        clearOnboardingCompletion()
         savePhone(response.phone)
         hasLoadedProfile = false
         await loadCurrentUser(force: true)
@@ -279,7 +291,6 @@ final class FastAPIClient: ObservableObject {
         )
 
         applyAuthResponse(response)
-        clearOnboardingCompletion()
         savePhone(response.phone)
         hasLoadedProfile = false
         await loadCurrentUser(force: true)
@@ -298,7 +309,7 @@ final class FastAPIClient: ObservableObject {
         UserDefaults.standard.removeObject(forKey: sessionStorageKey)
         UserDefaults.standard.removeObject(forKey: refreshTokenStorageKey)
         clearStoredPhone()
-        clearOnboardingCompletion()
+        authenticatedUserId = nil
     }
 
     // MARK: - Profile
@@ -909,15 +920,24 @@ final class FastAPIClient: ObservableObject {
     }
 
     private var hasStoredOnboardingCompletion: Bool {
-        UserDefaults.standard.bool(forKey: onboardingCompleteKey)
+        guard let userId = currentUser?.id ?? authenticatedUserId else { return false }
+        return UserDefaults.standard.bool(forKey: onboardingCompletionKey(for: userId))
     }
 
     private func persistOnboardingCompletion() {
-        UserDefaults.standard.set(true, forKey: onboardingCompleteKey)
+        guard let userId = currentUser?.id ?? authenticatedUserId else { return }
+        UserDefaults.standard.set(true, forKey: onboardingCompletionKey(for: userId))
     }
 
-    private func clearOnboardingCompletion() {
-        UserDefaults.standard.removeObject(forKey: onboardingCompleteKey)
+    private func onboardingCompletionKey(for userId: String) -> String {
+        "\(onboardingCompleteKey).\(userId)"
+    }
+
+    private func migrateLegacyOnboardingFlagIfNeeded(for userId: String) {
+        if UserDefaults.standard.object(forKey: onboardingCompleteKey) as? Bool == true {
+            UserDefaults.standard.set(true, forKey: onboardingCompletionKey(for: userId))
+            UserDefaults.standard.removeObject(forKey: onboardingCompleteKey)
+        }
     }
 
     private func evaluateProfileSetup(for user: User) {
@@ -1020,6 +1040,7 @@ final class FastAPIClient: ObservableObject {
     }
 
     private func applyAuthResponse(_ response: AuthResponse) {
+        authenticatedUserId = response.userId
         accessToken = response.accessToken
         if let newRefresh = response.refreshToken {
             refreshToken = newRefresh.isEmpty ? nil : newRefresh

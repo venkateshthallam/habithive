@@ -132,13 +132,30 @@ async def refresh_token(request: RefreshTokenRequest):
                 detail="Missing refresh token"
             )
 
-        response = supabase.auth.refresh_session(request.refresh_token)
-        
+        response = supabase.auth.refresh_session(refresh_token=request.refresh_token)
+        session = getattr(response, "session", None)
+        user = getattr(response, "user", None)
+
+        if not session or not getattr(session, "access_token", None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to refresh token: missing session"
+            )
+
+        if not user or not getattr(user, "id", None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to refresh token: missing user"
+            )
+
+        refresh_token = getattr(session, "refresh_token", None) or request.refresh_token
+        phone = getattr(user, "phone", "")
+
         return AuthResponse(
-            access_token=response.session.access_token,
-            refresh_token=response.session.refresh_token,
-            user_id=response.user.id,
-            phone=response.user.phone
+            access_token=session.access_token,
+            refresh_token=refresh_token,
+            user_id=user.id,
+            phone=phone
         )
     except Exception as e:
         raise HTTPException(

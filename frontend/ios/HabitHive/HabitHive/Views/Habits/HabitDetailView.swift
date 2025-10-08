@@ -2,6 +2,7 @@ import SwiftUI
 
 extension Notification.Name {
     static let habitDeleted = Notification.Name("habitDeleted")
+    static let hiveCreated = Notification.Name("hiveCreated")
 }
 
 struct HabitDetailView: View {
@@ -12,6 +13,8 @@ struct HabitDetailView: View {
     @State private var selectedMonth = Date()
     @State private var showDeleteAlert = false
     @State private var currentHabit: Habit
+    @State private var toastMessage: String?
+    @State private var isErrorToast = false
 
     init(habit: Habit) {
         self.habit = habit
@@ -77,6 +80,20 @@ struct HabitDetailView: View {
             }
         } message: {
             Text("Are you sure you want to delete this habit? This action cannot be undone.")
+        }
+        .overlay(alignment: .top) {
+            if let message = toastMessage {
+                ToastView(message: message, isError: isErrorToast)
+                    .padding(.top, 50)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            withAnimation {
+                                toastMessage = nil
+                            }
+                        }
+                    }
+            }
         }
     }
     
@@ -261,13 +278,24 @@ struct HabitDetailView: View {
         VStack(spacing: HiveSpacing.sm) {
             // Convert to Hive
             Button(action: {
-                viewModel.convertToHive(habitId: currentHabit.id)
+                viewModel.convertToHive(habitId: currentHabit.id) { success, message in
+                    isErrorToast = !success
+                    toastMessage = message
+                }
             }) {
                 HStack {
-                    Image(systemName: "person.2.fill")
+                    if viewModel.isConvertingToHive {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "person.2.fill")
+                    }
                     Text("Create a Hive")
                     Spacer()
-                    Image(systemName: "arrow.right")
+                    if !viewModel.isConvertingToHive {
+                        Image(systemName: "arrow.right")
+                    }
                 }
                 .font(HiveTypography.callout)
                 .foregroundColor(HiveColors.slateText)
@@ -278,6 +306,7 @@ struct HabitDetailView: View {
                         .shadow(color: .black.opacity(0.05), radius: 3)
                 )
             }
+            .disabled(viewModel.isConvertingToHive)
             
             // Delete Habit
             Button(action: {
@@ -481,6 +510,7 @@ class HabitDetailViewModel: ObservableObject {
     @Published var isCompletedToday = false
     @Published var totalDays = 0
     @Published var isLoading = false
+    @Published var isConvertingToHive = false
     @Published var errorMessage = ""
 
     private let apiClient = FastAPIClient.shared
@@ -719,15 +749,54 @@ class HabitDetailViewModel: ObservableObject {
         }
     }
 
-    func convertToHive(habitId: String) {
+    func convertToHive(habitId: String, completion: @escaping (Bool, String) -> Void) {
         Task {
+            await MainActor.run {
+                isConvertingToHive = true
+            }
+
             do {
                 let hive = try await apiClient.createHiveFromHabit(habitId: habitId, name: nil, backfillDays: 30)
                 print("Created hive: \(hive.id)")
+                await MainActor.run {
+                    isConvertingToHive = false
+                    NotificationCenter.default.post(name: .hiveCreated, object: hive.id)
+                    completion(true, "Hive created successfully! 🎉")
+                }
             } catch {
-                await MainActor.run { self.errorMessage = error.localizedDescription }
+                await MainActor.run {
+                    isConvertingToHive = false
+                    self.errorMessage = error.localizedDescription
+                    completion(false, "Failed to create hive: \(error.localizedDescription)")
+                }
             }
         }
+    }
+}
+
+// MARK: - Toast View
+private struct ToastView: View {
+    let message: String
+    let isError: Bool
+    @StateObject private var themeManager = ThemeManager.shared
+
+    var body: some View {
+        HStack(spacing: HiveSpacing.sm) {
+            Image(systemName: isError ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                .foregroundColor(isError ? HiveColors.error : HiveColors.mintSuccess)
+
+            Text(message)
+                .font(HiveTypography.body)
+                .foregroundColor(themeManager.currentTheme.primaryTextColor)
+        }
+        .padding(.horizontal, HiveSpacing.lg)
+        .padding(.vertical, HiveSpacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: HiveRadius.medium)
+                .fill(themeManager.currentTheme.cardBackgroundColor)
+                .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, HiveSpacing.lg)
     }
 }
 

@@ -79,7 +79,9 @@ enum SupabaseConfiguration {
            let url = URL(string: raw), !raw.isEmpty {
             return url
         }
-        // FastAPI backend URL
+        if let derived = fallbackSupabaseURL() {
+            return derived
+        }
         return url
     }
 
@@ -92,7 +94,9 @@ enum SupabaseConfiguration {
            let url = URL(string: raw), !raw.isEmpty {
             return url
         }
-        // FastAPI backend URL for auth
+        if let derived = fallbackSupabaseURL() {
+            return derived
+        }
         return url
     }
 
@@ -124,5 +128,10 @@ enum SupabaseConfiguration {
         }
 
         return Data(base64Encoded: base64)
+    }
+
+    private static func fallbackSupabaseURL() -> URL? {
+        guard let ref = projectRefFromAnonKey() else { return nil }
+        return URL(string: "https://\(ref).supabase.co")
     }
 }

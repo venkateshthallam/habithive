@@ -327,6 +327,7 @@ final class APIClient: ObservableObject {
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     private let sessionStorageKey = "supabase.session"
+    private let sessionRefreshLeeway: TimeInterval = 5 * 60
 
     private var session: SupabaseSession? {
         didSet {
@@ -365,7 +366,7 @@ final class APIClient: ObservableObject {
     func refreshSessionIfNeeded() async throws {
         guard let session else { throw APIError.unauthorized }
         let timeToExpiry = session.expiresAt.timeIntervalSinceNow
-        if timeToExpiry > 60 { return }
+        if timeToExpiry > sessionRefreshLeeway { return }
         try await refreshSession()
     }
 
@@ -393,6 +394,7 @@ final class APIClient: ObservableObject {
         guard let session else { return }
         if !force, let current = currentUser, current.id == session.user.id { return }
         do {
+            try await refreshSessionIfNeeded()
             let profile = try await fetchProfile(userId: session.user.id)
             let phone = profilePhone(from: session)
             let user = User(
@@ -406,6 +408,11 @@ final class APIClient: ObservableObject {
             )
             currentUser = user
             evaluateProfileSetup(for: user)
+        } catch let apiError as APIError {
+            if case .unauthorized = apiError {
+                logout()
+            }
+            print("Failed to load profile: \(apiError)")
         } catch {
             print("Failed to load profile: \(error)")
         }
@@ -863,6 +870,11 @@ final class APIClient: ObservableObject {
     }
 
     private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+        try await performRequest(request, retrying: true)
+    }
+
+    private func performRequest<T: Decodable>(_ originalRequest: URLRequest, retrying: Bool) async throws -> T {
+        var request = originalRequest
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
@@ -877,8 +889,24 @@ final class APIClient: ObservableObject {
             }
 
             if httpResponse.statusCode == 401 {
-                logout()
-                throw APIError.unauthorized
+                let hadAuthHeader = request.value(forHTTPHeaderField: "Authorization")?.lowercased().hasPrefix("bearer ") ?? false
+                if retrying, hadAuthHeader, session != nil {
+                    do {
+                        try await refreshSession()
+                        if let accessToken = session?.accessToken {
+                            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                        } else {
+                            request.setValue(nil, forHTTPHeaderField: "Authorization")
+                        }
+                        return try await performRequest(request, retrying: false)
+                    } catch {
+                        logout()
+                        throw APIError.unauthorized
+                    }
+                } else {
+                    logout()
+                    throw APIError.unauthorized
+                }
             }
 
             if httpResponse.statusCode >= 400 {

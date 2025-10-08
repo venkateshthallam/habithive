@@ -93,6 +93,10 @@ struct HivesView: View {
             .onAppear {
                 viewModel.loadHives()
             }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("hiveCreated"))) { notification in
+                print("🐝 HivesView: Received hiveCreated notification, hiveId: \(notification.object ?? "nil")")
+                Task { await viewModel.refreshHives() }
+            }
             .sheet(isPresented: $showJoinHive, onDismiss: {
                 viewModel.resetJoinStatus()
             }) {
@@ -631,26 +635,32 @@ class HivesViewModel: ObservableObject {
     }
 
     func refreshHives() async {
+        print("🔄 HivesViewModel: Refreshing hives with force=true")
         await loadHivesAsync(force: true)
     }
 
     @MainActor
     private func loadHivesAsync(force: Bool) async {
+        print("🔍 HivesViewModel: loadHivesAsync called with force=\(force)")
+
         if !force,
            let lastLoadedAt,
            Date().timeIntervalSince(lastLoadedAt) < freshnessInterval,
            !hives.isEmpty {
+            print("⏭️ HivesViewModel: Skipping load, using cached data")
             return
         }
 
         isLoading = true
 
         do {
+            print("📡 HivesViewModel: Fetching hives from API")
             let overview = try await apiClient.getHives()
             self.hives = overview.hives
             self.leaderboard = overview.leaderboard
             lastLoadedAt = Date()
             errorMessage = ""
+            print("✅ HivesViewModel: Successfully loaded \(overview.hives.count) hives")
 
             if let summary = try? await apiClient.getInsightsSummary() {
                 applyInsights(summary)
