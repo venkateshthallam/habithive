@@ -80,6 +80,15 @@ struct Habit: Codable, Identifiable {
     var isActive: Bool
     let createdAt: Date
     var updatedAt: Date
+    var isShared: Bool = false
+    var hiveId: String?
+    var hiveRule: String?
+    var hiveMemberCount: Int?
+    var hiveCurrentLength: Int?
+    var hiveLongestStreak: Int?
+    var sharedValueToday: Int?
+    var sharedDoneToday: Bool?
+    var sourceHabitId: String?
     
     // Additional properties for UI
     var recentLogs: [HabitLog]?
@@ -101,6 +110,15 @@ struct Habit: Codable, Identifiable {
         case isActive = "is_active"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case isShared = "is_shared"
+        case hiveId = "hive_id"
+        case hiveRule = "hive_rule"
+        case hiveMemberCount = "hive_member_count"
+        case hiveCurrentLength = "hive_current_length"
+        case hiveLongestStreak = "hive_longest_streak"
+        case sharedValueToday = "shared_value_today"
+        case sharedDoneToday = "shared_done_today"
+        case sourceHabitId = "source_habit_id"
         case recentLogs = "recent_logs"
         case currentStreak = "current_streak"
         case completionRate = "completion_rate"

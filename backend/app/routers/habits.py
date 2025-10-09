@@ -101,76 +101,189 @@ async def get_habits(
         return result
     
     try:
-        print(f"Getting habits for user: {user_id}")
-        supabase = get_supabase_admin()
+        supabase_user = get_user_supabase_client(current_user)
+        supabase_admin = get_supabase_admin()
 
-        # Get habits for the authenticated user using the service role to avoid
-        # issues with expired caller tokens while still scoping to the caller's
-        # user_id.
-        response = (
-            supabase
-            .table("habits")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("is_active", True)
-            .order("created_at", desc=True)
-            .execute()
-        )
+        dashboard_response = supabase_user.rpc("user_dashboard_habits", {"p_days": days}).execute()
+        if getattr(dashboard_response, "error", None):
+            raise Exception(dashboard_response.error.get("message", "Unable to fetch dashboard habits"))
 
-        if getattr(response, "error", None):
-            raise Exception(response.error.get("message", "Unable to fetch habits"))
+        dashboard_rows = dashboard_response.data or []
+        habit_ids = [
+            str(row["habit_id"])
+            for row in dashboard_rows
+            if row.get("source") == "personal" and row.get("habit_id")
+        ]
+        hive_ids = [
+            str(row["hive_id"])
+            for row in dashboard_rows
+            if row.get("source") == "shared" and row.get("hive_id")
+        ]
 
-        habits = response.data or []
-        print(f"Found {len(habits)} habits for user {user_id}")
-        
-        result = []
-        for habit in habits:
-            print(f"Processing habit: {habit['id']} - {habit['name']}")
-            habit_with_logs = HabitWithLogs(**habit)
+        start_date = (date.today() - timedelta(days=days)).isoformat()
+        personal_logs_map: Dict[str, List[dict]] = {}
+        hive_logs_map: Dict[str, List[dict]] = {}
+
+        if include_logs and habit_ids:
+            logs_response = (
+                supabase_admin
+                .table("habit_logs")
+                .select("*")
+                .eq("user_id", user_id)
+                .gte("log_date", start_date)
+                .in_("habit_id", habit_ids)
+                .execute()
+            )
+
+            if getattr(logs_response, "error", None):
+                raise Exception(logs_response.error.get("message", "Unable to fetch habit logs"))
+
+            for log in logs_response.data or []:
+                key = str(log["habit_id"])
+                personal_logs_map.setdefault(key, []).append(log)
+
+        if hive_ids:
+            hive_logs_query = (
+                supabase_admin
+                .table("hive_member_days")
+                .select("*")
+                .eq("user_id", user_id)
+            )
+            if include_logs:
+                hive_logs_query = hive_logs_query.gte("day_date", start_date)
+            hive_logs_response = hive_logs_query.in_("hive_id", hive_ids).execute()
+
+            if getattr(hive_logs_response, "error", None):
+                raise Exception(hive_logs_response.error.get("message", "Unable to fetch hive logs"))
+
+            for row in hive_logs_response.data or []:
+                key = str(row["hive_id"])
+                row["log_date"] = row.get("day_date")
+                row["value"] = int(row.get("value", 0) or 0)
+                hive_logs_map.setdefault(key, []).append(row)
+
+        today_response = supabase_admin.rpc("user_local_date", {"p_user": user_id}).execute()
+        raw_today = today_response.data if getattr(today_response, "data", None) is not None else None
+        if isinstance(raw_today, list):
+            user_today = str(raw_today[0]) if raw_today else None
+        elif isinstance(raw_today, dict):
+            user_today = str(next(iter(raw_today.values()), None))
+        else:
+            user_today = str(raw_today) if raw_today is not None else None
+        if not user_today:
+            user_today = date.today().isoformat()
+
+        def sort_key(entry: dict):
+            return entry.get("created_at") or entry.get("updated_at") or ""
+
+        combined: List[HabitWithLogs] = []
+        for entry in sorted(dashboard_rows, key=sort_key, reverse=True):
+            source = entry.get("source")
+            is_shared = source == "shared"
+            base_id = entry.get("habit_id") or entry.get("hive_id")
+            if not base_id:
+                continue
+
+            base_id_str = str(base_id)
+            target = int(entry.get("target_per_day") or 1)
+            recent_logs: List[HabitLog] = []
+            current_streak = 0
+            completion_rate = 0.0
+            shared_value_today: Optional[int] = None
+            shared_done_today: Optional[bool] = None
 
             if include_logs:
-                # Get recent logs
-                start_date = (date.today() - timedelta(days=days)).isoformat()
-                print(f"Looking for logs since: {start_date}")
-                logs_response = (
-                    supabase
-                    .table("habit_logs")
-                    .select("*")
-                    .eq("habit_id", habit["id"])
-                    .eq("user_id", user_id)
-                    .gte("log_date", start_date)
-                    .order("log_date", desc=True)
-                    .execute()
-                )
+                if is_shared:
+                    raw_logs = hive_logs_map.get(base_id_str, [])
+                    raw_logs_sorted = sorted(raw_logs, key=lambda l: l.get("day_date"), reverse=True)
+                    converted_logs = []
+                    for row in raw_logs_sorted:
+                        log_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"{base_id_str}-{row.get('day_date')}")
+                        converted_logs.append({
+                            "id": log_id,
+                            "habit_id": base_id,
+                            "user_id": row.get("user_id"),
+                            "log_date": row.get("day_date"),
+                            "value": int(row.get("value", 0) or 0),
+                            "source": "hive",
+                            "created_at": row.get("created_at") or datetime.utcnow().isoformat()
+                        })
+                    recent_logs = [HabitLog(**log) for log in converted_logs]
+                    current_streak = calculate_streak(raw_logs_sorted, target=target)
+                    completed_days = len({
+                        str(r.get("day_date"))
+                        for r in raw_logs_sorted
+                        if int(r.get("value", 0) or 0) >= target
+                    })
+                    completion_rate = (completed_days / days) * 100 if days > 0 else 0.0
+                    today_entry = next(
+                        (r for r in raw_logs_sorted if str(r.get("day_date")) == str(user_today)),
+                        None
+                    )
+                    if today_entry:
+                        shared_value_today = int(today_entry.get("value", 0) or 0)
+                        shared_done_today = shared_value_today >= target
+                    else:
+                        shared_value_today = 0
+                        shared_done_today = False
+                else:
+                    raw_logs = personal_logs_map.get(base_id_str, [])
+                    raw_logs_sorted = sorted(raw_logs, key=lambda l: l.get("log_date"), reverse=True)
+                    recent_logs = [HabitLog(**log) for log in raw_logs_sorted]
+                    current_streak = calculate_streak(raw_logs_sorted, target=target)
+                    completed_days = len({str(l.get("log_date")) for l in raw_logs_sorted})
+                    completion_rate = (completed_days / days) * 100 if days > 0 else 0.0
 
-                if getattr(logs_response, "error", None):
-                    print(f"Error fetching logs: {logs_response.error}")
-                    raise Exception(logs_response.error.get("message", "Unable to fetch logs"))
+            entry_type = entry.get("type") or HabitType.checkbox
+            if isinstance(entry_type, str):
+                entry_type = HabitType(entry_type)
 
-                logs = logs_response.data or []
-                print(f"Found {len(logs)} logs for habit {habit['id']}: {logs}")
+            hive_member_count = entry.get("hive_member_count")
+            if hive_member_count is not None:
+                hive_member_count = int(hive_member_count)
+            hive_current_length = entry.get("hive_current_length")
+            if hive_current_length is not None:
+                hive_current_length = int(hive_current_length)
+            hive_longest_streak = entry.get("hive_longest_streak")
+            if hive_longest_streak is not None:
+                hive_longest_streak = int(hive_longest_streak)
+            if shared_value_today is not None:
+                shared_value_today = int(shared_value_today)
+            source_habit_id = entry.get("source_habit_id")
 
-                # Convert to HabitLog objects and log the conversion
-                habit_logs = []
-                for l in logs:
-                    habit_log = HabitLog(**l)
-                    print(f"Converted log: {l} -> HabitLog(log_date={habit_log.log_date})")
-                    habit_logs.append(habit_log)
+            habit_data = {
+                "id": base_id,
+                "user_id": user_id,
+                "name": entry.get("name"),
+                "emoji": entry.get("emoji"),
+                "color_hex": entry.get("color_hex") or "#FF9F1C",
+                "type": entry_type,
+                "target_per_day": target,
+                "schedule_daily": entry.get("schedule_daily", True),
+                "schedule_weekmask": entry.get("schedule_weekmask", 127),
+                "reminder_enabled": False,
+                "reminder_time": None,
+                "is_active": entry.get("is_active", True),
+                "created_at": entry.get("created_at"),
+                "updated_at": entry.get("updated_at"),
+                "is_shared": is_shared,
+                "hive_id": entry.get("hive_id"),
+                "hive_rule": entry.get("hive_rule"),
+                "hive_member_count": hive_member_count,
+                "hive_current_length": hive_current_length,
+                "hive_longest_streak": hive_longest_streak,
+                "shared_value_today": shared_value_today,
+                "shared_done_today": shared_done_today,
+                "source_habit_id": source_habit_id,
+                "recent_logs": recent_logs,
+                "current_streak": current_streak,
+                "completion_rate": float(completion_rate),
+            }
 
-                habit_with_logs.recent_logs = habit_logs
-                habit_with_logs.current_streak = calculate_streak(
-                    logs,
-                    target=habit.get("target_per_day", 1) or 1,
-                )
+            habit_with_logs = HabitWithLogs(**habit_data)
+            combined.append(habit_with_logs)
 
-                # Calculate completion rate
-                completed_days = len(set(l["log_date"] for l in logs))
-                habit_with_logs.completion_rate = (completed_days / days) * 100 if days > 0 else 0
-                print(f"Habit {habit['id']} final logs count: {len(habit_with_logs.recent_logs or [])}")
-
-            result.append(habit_with_logs)
-        
-        return result
+        return combined
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

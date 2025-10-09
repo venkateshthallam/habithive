@@ -249,7 +249,8 @@ begin
     longest_streak,
     is_active,
     created_at,
-    updated_at
+    updated_at,
+    source_habit_id
   )
   values (
     gen_random_uuid(),
@@ -266,7 +267,8 @@ begin
     0,
     true,
     now(),
-    now()
+    now(),
+    v_habit.id
   )
   returning id into v_hive;
 

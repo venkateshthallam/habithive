@@ -514,6 +514,15 @@ final class FastAPIClient: ObservableObject {
 
             habitModel.currentStreak = habitResponse.current_streak
             habitModel.completionRate = habitResponse.completion_rate
+            habitModel.isShared = habitResponse.is_shared ?? false
+            habitModel.hiveId = habitResponse.hive_id?.uuidString
+            habitModel.hiveRule = habitResponse.hive_rule
+            habitModel.hiveMemberCount = habitResponse.hive_member_count
+            habitModel.hiveCurrentLength = habitResponse.hive_current_length
+            habitModel.hiveLongestStreak = habitResponse.hive_longest_streak
+            habitModel.sharedValueToday = habitResponse.shared_value_today
+            habitModel.sharedDoneToday = habitResponse.shared_done_today
+            habitModel.sourceHabitId = habitResponse.source_habit_id?.uuidString
             return habitModel
         }
     }
@@ -1251,6 +1260,15 @@ private struct HabitWithLogsResponse: Decodable {
     let is_active: Bool
     let created_at: Date
     let updated_at: Date
+    let is_shared: Bool?
+    let hive_id: UUID?
+    let hive_rule: String?
+    let hive_member_count: Int?
+    let hive_current_length: Int?
+    let hive_longest_streak: Int?
+    let shared_value_today: Int?
+    let shared_done_today: Bool?
+    let source_habit_id: UUID?
     let recent_logs: [HabitLogResponse]?
     let current_streak: Int?
     let completion_rate: Double?

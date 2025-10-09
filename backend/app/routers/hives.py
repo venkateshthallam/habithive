@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, date, timedelta
 import uuid
 import secrets
+import json
 
 router = APIRouter()
 
@@ -1079,13 +1080,40 @@ async def log_hive_day(
         if not membership.data:
             raise HTTPException(status_code=403, detail="Not a member of this hive")
 
-        # Call log_hive_today RPC
         response = supabase.rpc("log_hive_today", {
             "p_hive_id": hive_id,
             "p_value": log.value
         }).execute()
-        
-        return HiveMemberDay(**response.data)
+
+        result = response.data
+
+        if isinstance(result, list):
+            if not result:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to log hive day: empty response from Supabase"
+                )
+            result = result[0]
+
+        if isinstance(result, dict) and "log_hive_today" in result:
+            result = result["log_hive_today"]
+
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to log hive day: unable to decode response ({exc})"
+                )
+
+        if not isinstance(result, dict):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to log hive day: unexpected response shape"
+            )
+
+        return HiveMemberDay(**result)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -4,12 +4,17 @@ import Combine
 import UIKit
 #endif
 
+private struct HiveSelection: Identifiable {
+    let id: String
+}
+
 struct HabitsHomeView: View {
     @EnvironmentObject private var session: AppSessionController
     @StateObject private var viewModel = HabitsViewModel()
     @StateObject private var themeManager = ThemeManager.shared
     @State private var showCreateHabit = false
     @State private var selectedHabit: Habit?
+    @State private var selectedHive: HiveSelection?
     @State private var showGuestAuthAlert = false
     // Inline animation now lives inside BeeButton + Hex cells
 
@@ -78,6 +83,9 @@ struct HabitsHomeView: View {
         }
         .sheet(item: $selectedHabit) { habit in
             HabitDetailView(habit: habit)
+        }
+        .sheet(item: $selectedHive) { selection in
+            HiveDetailView(hiveId: selection.id)
         }
         .alert("Sign In Required", isPresented: $showGuestAuthAlert) {
             Button("Not now", role: .cancel) { }
@@ -198,30 +206,53 @@ struct HabitsHomeView: View {
     
     private func handleBeeButtonTap(_ habit: Habit) {
         let todayLog = viewModel.todayLog(for: habit.id)
+
+        if habit.isShared {
+            if habit.type == .checkbox {
+                guard todayLog == nil else { return }
+#if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+#endif
+                let value = max(1, habit.targetPerDay)
+                viewModel.optimisticToggle(habit: habit, value: value, adding: true)
+                viewModel.logHabit(habit, value: value)
+            } else {
+                let currentValue = todayLog?.value ?? 0
+                let newValue = min(currentValue + 1, habit.targetPerDay)
+                guard newValue != currentValue else { return }
+#if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+#endif
+                viewModel.optimisticToggle(habit: habit, value: newValue, adding: true)
+                viewModel.logHabit(habit, value: newValue)
+            }
+            return
+        }
+
         if let log = todayLog {
-            // Remove existing log
             let removed = viewModel.optimisticToggle(habit: habit, value: log.value, adding: false)
             if removed {
 #if canImport(UIKit)
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
 #endif
-                viewModel.deleteHabitLog(habitId: habit.id, logDateString: log.logDate)
+                viewModel.deleteHabitLog(habit, logDateString: log.logDate)
             }
         } else {
-            // Add new log
-            let value = habit.type == .counter ? habit.targetPerDay : 1
 #if canImport(UIKit)
             UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
 #endif
-            // Always perform optimistic update and API call
+            let value = habit.type == .counter ? habit.targetPerDay : 1
             viewModel.optimisticToggle(habit: habit, value: value, adding: true)
-            viewModel.logHabit(habitId: habit.id, value: value)
-            // Inline animation handled by BeeButton + HexCellView
+            viewModel.logHabit(habit, value: value)
         }
     }
 
     private func handleHabitLongPress(_ habit: Habit) {
-        selectedHabit = habit
+        if habit.isShared {
+            selectedHive = HiveSelection(id: habit.hiveId ?? habit.id)
+        } else {
+            selectedHabit = habit
+        }
     }
 
     private func handleCounterIncrement(_ habit: Habit) {
@@ -230,12 +261,19 @@ struct HabitsHomeView: View {
         let currentValue = todayLog?.value ?? 0
         let newValue = min(currentValue + 1, habit.targetPerDay)
 
-        #if canImport(UIKit)
+#if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        #endif
+#endif
+
+        if habit.isShared {
+            guard newValue != currentValue else { return }
+            viewModel.optimisticToggle(habit: habit, value: newValue, adding: true)
+            viewModel.logHabit(habit, value: newValue)
+            return
+        }
 
         viewModel.optimisticToggle(habit: habit, value: newValue, adding: true)
-        viewModel.logHabit(habitId: habit.id, value: newValue)
+        viewModel.logHabit(habit, value: newValue)
     }
 
     private func handleCounterDecrement(_ habit: Habit) {
@@ -245,22 +283,28 @@ struct HabitsHomeView: View {
 
         guard currentValue > 0 else { return }
 
-        #if canImport(UIKit)
+#if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        #endif
+#endif
+
+        if habit.isShared {
+            let newValue = max(currentValue - 1, 1)
+            guard newValue != currentValue else { return }
+            viewModel.optimisticToggle(habit: habit, value: newValue, adding: true)
+            viewModel.logHabit(habit, value: newValue)
+            return
+        }
 
         let newValue = currentValue - 1
 
         if newValue == 0 {
-            // Delete the log if value reaches 0
             let removed = viewModel.optimisticToggle(habit: habit, value: newValue, adding: false)
             if removed {
-                viewModel.deleteHabitLog(habitId: habit.id, logDateString: todayLog!.logDate)
+                viewModel.deleteHabitLog(habit, logDateString: todayLog!.logDate)
             }
         } else {
-            // Update with new value
             viewModel.optimisticToggle(habit: habit, value: newValue, adding: true)
-            viewModel.logHabit(habitId: habit.id, value: newValue)
+            viewModel.logHabit(habit, value: newValue)
         }
     }
 
@@ -329,6 +373,10 @@ struct HabitCardView: View {
                         .foregroundColor(theme.primaryTextColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
+
+                    if habit.isShared {
+                        HiveSharedBadge(memberCount: habit.hiveMemberCount, theme: theme)
+                    }
 
                     Text(subtitleText)
                         .font(HiveTypography.caption)
@@ -1141,6 +1189,35 @@ enum HoneycombCellState {
     case future
 }
 
+private struct HiveSharedBadge: View {
+    let memberCount: Int?
+    let theme: AppTheme
+
+    private var labelText: String {
+        if let count = memberCount, count > 0 {
+            return "Hive • \(count)"
+        }
+        return "Hive"
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "hexagon.fill")
+                .font(.system(size: 12, weight: .semibold))
+            Text(labelText)
+                .font(HiveTypography.caption)
+                .fontWeight(.semibold)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .foregroundStyle(theme.primaryGradient)
+        .background(
+            Capsule()
+                .fill(theme == .night ? Color.white.opacity(0.12) : Color.white.opacity(0.2))
+        )
+    }
+}
+
 struct HabitGlyph: View {
     let emoji: String?
     let accentColor: Color
@@ -1407,13 +1484,13 @@ class HabitsViewModel: ObservableObject {
         return formatter.string(from: adjusted)
     }
 
-    func logHabit(habitId: String, value: Int) {
+    func logHabit(_ habit: Habit, value: Int) {
         Task { @MainActor [weak self] in
             guard let self else { return }
             if self.session.mode == .guest {
                 do {
-                    let result = try await self.localStore.logHabit(habitId: habitId, value: value)
-                    self.applyLogResult(result, habitId: habitId)
+                    let result = try await self.localStore.logHabit(habitId: habit.id, value: value)
+                    self.applyLogResult(result, habitId: habit.id)
                 } catch {
                     self.errorMessage = error.localizedDescription
                     await self.refreshHabits()
@@ -1422,8 +1499,15 @@ class HabitsViewModel: ObservableObject {
             }
 
             do {
-                let result = try await self.apiClient.logHabit(habitId: habitId, value: value)
-                self.applyLogResult(result, habitId: habitId)
+                if habit.isShared {
+                    let hiveId = habit.hiveId ?? habit.id
+                    let result = try await self.apiClient.logHiveDay(hiveId: hiveId, value: value)
+                    let log = self.convertToHabitLog(result, habitId: habit.id)
+                    self.applyLogResult(log, habitId: habit.id)
+                } else {
+                    let result = try await self.apiClient.logHabit(habitId: habit.id, value: value)
+                    self.applyLogResult(result, habitId: habit.id)
+                }
                 await self.silentRefresh()
             } catch {
                 self.errorMessage = error.localizedDescription
@@ -1432,13 +1516,17 @@ class HabitsViewModel: ObservableObject {
         }
     }
 
-    func deleteHabitLog(habitId: String, logDateString: String) {
+    func deleteHabitLog(_ habit: Habit, logDateString: String) {
+        if habit.isShared {
+            return
+        }
+
         let logDate = DateFormatter.hiveDayFormatter.date(from: logDateString)
         Task { @MainActor [weak self] in
             guard let self else { return }
             if self.session.mode == .guest {
                 do {
-                    try await self.localStore.deleteHabitLog(habitId: habitId, logDate: logDateString)
+                    try await self.localStore.deleteHabitLog(habitId: habit.id, logDate: logDateString)
                 } catch {
                     self.errorMessage = error.localizedDescription
                     await self.refreshHabits()
@@ -1447,7 +1535,7 @@ class HabitsViewModel: ObservableObject {
             }
 
             do {
-                try await self.apiClient.deleteHabitLog(habitId: habitId, logDate: logDate)
+                try await self.apiClient.deleteHabitLog(habitId: habit.id, logDate: logDate)
                 await self.silentRefresh()
             } catch {
                 self.errorMessage = error.localizedDescription
@@ -1504,8 +1592,24 @@ class HabitsViewModel: ObservableObject {
         } else {
             logs.append(result)
         }
-        habitCopy.recentLogs = logs
+        habitCopy.recentLogs = logs.sorted { $0.logDate > $1.logDate }
+        if habitCopy.isShared {
+            habitCopy.sharedValueToday = result.value
+            habitCopy.sharedDoneToday = result.value >= habitCopy.targetPerDay
+        }
         habits[idx] = habitCopy
+    }
+
+    private func convertToHabitLog(_ hiveDay: HiveMemberDay, habitId: String) -> HabitLog {
+        HabitLog(
+            id: "\(habitId)-\(hiveDay.dayDate)",
+            habitId: habitId,
+            userId: hiveDay.userId,
+            logDate: hiveDay.dayDate,
+            value: hiveDay.value,
+            source: "hive",
+            createdAt: hiveDay.createdAt ?? Date()
+        )
     }
 }
 

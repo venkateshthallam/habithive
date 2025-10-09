@@ -110,6 +110,15 @@ class Habit(HabitBase):
     is_active: bool = True
     created_at: datetime
     updated_at: datetime
+    is_shared: bool = False
+    hive_id: Optional[UUID] = None
+    hive_rule: Optional[str] = None
+    hive_member_count: Optional[int] = None
+    hive_current_length: Optional[int] = None
+    hive_longest_streak: Optional[int] = None
+    shared_value_today: Optional[int] = None
+    shared_done_today: Optional[bool] = None
+    source_habit_id: Optional[UUID] = None
     
     model_config = {"json_encoders": {datetime: lambda v: v.isoformat()}}
 
