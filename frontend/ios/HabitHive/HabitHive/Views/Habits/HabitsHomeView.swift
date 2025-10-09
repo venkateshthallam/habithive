@@ -8,6 +8,24 @@ private struct HiveSelection: Identifiable {
     let id: String
 }
 
+private struct SectionHeaderView: View {
+    let title: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: HiveSpacing.xs) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(HiveColors.honeyGradientEnd, HiveColors.honeyGradientStart)
+            Text(title)
+                .font(HiveTypography.headline)
+                .foregroundColor(HiveColors.beeBlack.opacity(0.8))
+            Spacer()
+        }
+        .padding(.top, HiveSpacing.sm)
+    }
+}
+
 struct HabitsHomeView: View {
     @EnvironmentObject private var session: AppSessionController
     @StateObject private var viewModel = HabitsViewModel()
@@ -36,37 +54,24 @@ struct HabitsHomeView: View {
                         emptyStateView
                     } else {
                         VStack(spacing: 0) {
-                            // Header
                             headerView
 
-                            LazyVStack(spacing: HiveSpacing.lg) {
-                                ForEach(viewModel.habits) { habit in
-                                    HabitCardView(
-                                        habit: habit,
-                                        todayKey: viewModel.currentDayKey,
-                                        theme: themeManager.currentTheme,
-                                        userTimezone: viewModel.userTimezone,
-                                        dayStartHour: viewModel.dayStartHour,
-                                        onLog: {
-                                            handleBeeButtonTap(habit)
-                                        },
-                                        onIncrement: {
-                                            handleCounterIncrement(habit)
-                                        },
-                                        onDecrement: {
-                                            handleCounterDecrement(habit)
-                                        },
-                                        onOpen: {
-                                            handleHabitLongPress(habit)
-                                        },
-                                        onLongPress: {
-                                            handleHabitLongPress(habit)
-                                        }
-                                    )
-                                }
+                            if !viewModel.personalHabits.isEmpty {
+                                SectionHeaderView(title: "Personal Habits", icon: "heart.fill")
+                                    .padding(.horizontal, HiveSpacing.lg)
+                                    .padding(.bottom, HiveSpacing.sm)
+
+                                habitList(viewModel.personalHabits)
                             }
-                            .padding(.horizontal, HiveSpacing.lg)
-                            .padding(.bottom, HiveSpacing.xxl)
+
+                            if !viewModel.sharedHabits.isEmpty {
+                                SectionHeaderView(title: "Shared Hives", icon: "hexagon")
+                                    .padding(.horizontal, HiveSpacing.lg)
+                                    .padding(.top, viewModel.personalHabits.isEmpty ? 0 : HiveSpacing.xl)
+                                    .padding(.bottom, HiveSpacing.sm)
+
+                                habitList(viewModel.sharedHabits)
+                            }
                         }
                     }
                 }
@@ -85,7 +90,7 @@ struct HabitsHomeView: View {
             HabitDetailView(habit: habit)
         }
         .sheet(item: $selectedHive) { selection in
-            HiveDetailView(hiveId: selection.id)
+            HiveDetailView(hiveId: selection.id, isPresentedAsSheet: true)
         }
         .alert("Sign In Required", isPresented: $showGuestAuthAlert) {
             Button("Not now", role: .cancel) { }
@@ -253,6 +258,37 @@ struct HabitsHomeView: View {
         } else {
             selectedHabit = habit
         }
+    }
+
+    private func habitList(_ habits: [Habit]) -> some View {
+        LazyVStack(spacing: HiveSpacing.lg, pinnedViews: []) {
+            ForEach(habits) { habit in
+                HabitCardView(
+                    habit: habit,
+                    todayKey: viewModel.currentDayKey,
+                    theme: themeManager.currentTheme,
+                    userTimezone: viewModel.userTimezone,
+                    dayStartHour: viewModel.dayStartHour,
+                    onLog: {
+                        handleBeeButtonTap(habit)
+                    },
+                    onIncrement: {
+                        handleCounterIncrement(habit)
+                    },
+                    onDecrement: {
+                        handleCounterDecrement(habit)
+                    },
+                    onOpen: {
+                        handleHabitLongPress(habit)
+                    },
+                    onLongPress: {
+                        handleHabitLongPress(habit)
+                    }
+                )
+            }
+        }
+        .padding(.horizontal, HiveSpacing.lg)
+        .padding(.bottom, HiveSpacing.xxl)
     }
 
     private func handleCounterIncrement(_ habit: Habit) {
@@ -1317,6 +1353,14 @@ class HabitsViewModel: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var lastLoadedAt: Date?
     private let freshnessInterval: TimeInterval = 90
+
+    var personalHabits: [Habit] {
+        habits.filter { !$0.isShared }
+    }
+
+    var sharedHabits: [Habit] {
+        habits.filter { $0.isShared }
+    }
 
     init(session: AppSessionController = .shared) {
         self.session = session

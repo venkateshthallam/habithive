@@ -59,12 +59,10 @@ struct WelcomeView: View {
                         } onCompletion: { result in
                             handleAppleSignIn(result)
                         }
-                        .signInWithAppleButtonStyle(.white)
+                        .signInWithAppleButtonStyle(themeManager.currentTheme == .night ? .white : .black)
                         .frame(height: 50)
-                        .frame(maxWidth: 375)
                         .frame(maxWidth: .infinity)
-                        .cornerRadius(HiveRadius.xlarge)
-                            .disabled(isProcessing)
+                        .disabled(isProcessing)
                     }
 
                     Button(role: .cancel) {

@@ -4,7 +4,8 @@ import UIKit
 #endif
 
 struct HiveDetailView: View {
-    let hiveId: String
+    private let hiveId: String
+    private let isPresentedAsSheet: Bool
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var themeManager = ThemeManager.shared
@@ -17,51 +18,21 @@ struct HiveDetailView: View {
     @State private var toastMessage: String?
     @State private var isErrorToast = false
 
+    init(hiveId: String, isPresentedAsSheet: Bool = false) {
+        self.hiveId = hiveId
+        self.isPresentedAsSheet = isPresentedAsSheet
+    }
+
     var body: some View {
-        ZStack {
-            themeManager.currentTheme.backgroundColor
-                .ignoresSafeArea()
-
-            if let hive = viewModel.hive {
-                ScrollView {
-                    VStack(spacing: HiveSpacing.lg) {
-                        headerCard(for: hive)
-                        progressCard(for: hive)
-                        heatmapCard(for: hive)
-                        membersCard(for: hive)
-                        activityCard(for: hive)
-
-                        if viewModel.isOwner {
-                            deleteCard
-                        } else {
-                            leaveCard
-                        }
-                    }
-                    .padding(.horizontal, HiveSpacing.lg)
-                    .padding(.bottom, HiveSpacing.xl)
-                    .padding(.top, HiveSpacing.lg)
+        Group {
+            if isPresentedAsSheet {
+                NavigationStack {
+                    decoratedContent
                 }
-                .refreshable { viewModel.load(hiveId: hiveId) }
-            } else if viewModel.isLoading {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .tint(HiveColors.honeyGradientEnd)
-            } else if let error = viewModel.errorMessage {
-                VStack(spacing: HiveSpacing.md) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(HiveColors.error)
-                    Text(error)
-                        .font(HiveTypography.body)
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(HiveColors.beeBlack)
-                }
-                .padding()
+            } else {
+                decoratedContent
             }
         }
-        .navigationTitle(viewModel.hive?.name ?? "Hive")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar { toolbarContent }
         .sheet(item: $shareContent) { share in
             ActivityView(activityItems: [share.text])
         }
@@ -130,9 +101,66 @@ struct HiveDetailView: View {
         .onAppear { viewModel.load(hiveId: hiveId) }
     }
 
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigationBarTrailing) {
-            // Toolbar items removed - log button moved to header card
+    private var decoratedContent: some View {
+        content
+            .navigationTitle(viewModel.hive?.name ?? "Hive")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItemGroup(placement: .navigationBarLeading) {
+                    if isPresentedAsSheet {
+                        Button("Close") {
+                            dismiss()
+                        }
+                    }
+                }
+
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    // Toolbar items removed - log button moved to header card
+                }
+            }
+    }
+
+    private var content: some View {
+        ZStack {
+            themeManager.currentTheme.backgroundColor
+                .ignoresSafeArea()
+
+            if let hive = viewModel.hive {
+                ScrollView {
+                    VStack(spacing: HiveSpacing.lg) {
+                        headerCard(for: hive)
+                        progressCard(for: hive)
+                        heatmapCard(for: hive)
+                        membersCard(for: hive)
+                        activityCard(for: hive)
+
+                        if viewModel.isOwner {
+                            deleteCard
+                        } else {
+                            leaveCard
+                        }
+                    }
+                    .padding(.horizontal, HiveSpacing.lg)
+                    .padding(.bottom, HiveSpacing.xl)
+                    .padding(.top, HiveSpacing.lg)
+                }
+                .refreshable { viewModel.load(hiveId: hiveId) }
+            } else if viewModel.isLoading {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(HiveColors.honeyGradientEnd)
+            } else if let error = viewModel.errorMessage {
+                VStack(spacing: HiveSpacing.md) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(HiveColors.error)
+                    Text(error)
+                        .font(HiveTypography.body)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(HiveColors.beeBlack)
+                }
+                .padding()
+            }
         }
     }
 
